@@ -11,8 +11,9 @@ python -m uvicorn app:app --app-dir Site --reload
 ```
 
 Open <http://127.0.0.1:8000>. Press `Ctrl+C` to stop the server. The site
-supports CSV, JSON, PDF, Markdown, and text files up to 5 MB each. Files are
-processed in memory and aren't saved by the app.
+supports individual files or whole folders containing CSV, JSON, PDF,
+Markdown, and text files up to 5 MB each. Supported files are processed one
+at a time in memory and aren't saved by the app.
 
 To use the AI assistant, set either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
 in the server's environment. Select the matching provider in the website.

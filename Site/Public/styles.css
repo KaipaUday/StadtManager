@@ -87,14 +87,16 @@ h1 span { color: var(--green); }
 .panel-heading p { margin-top: 5px; color: #8b958e; font-size: 10px; }
 .panel-step { color: #849087; font-size: 9px; font-weight: 700; }
 .panel-step span { color: #c1c8c1; font-weight: 500; }
-.dropzone { display: flex; min-height: 155px; flex-direction: column; align-items: center; justify-content: center; margin-top: 19px; border: 1px dashed #cbd9ce; border-radius: 9px; background: #fbfdfb; cursor: pointer; transition: border-color .2s, background .2s; }
+.dropzone { position: relative; display: flex; min-height: 155px; flex-direction: column; align-items: center; justify-content: center; margin-top: 19px; border: 1px dashed #cbd9ce; border-radius: 9px; background: #fbfdfb; transition: border-color .2s, background .2s; }
 .dropzone:hover, .dropzone.drag-over { border-color: #64a47b; background: #f5faf6; }
 .dropzone input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .upload-icon { display: grid; width: 33px; height: 33px; place-items: center; margin-bottom: 8px; border-radius: 10px; background: #eaf4ed; color: #41845e; }
 .upload-icon svg { width: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .dropzone strong { color: #405048; font-size: 11px; font-weight: 700; }
 .drop-subtitle { margin-top: 5px; color: #9aa39d; font-size: 10px; }
-.browse-link { color: #34795a; font-weight: 700; }
+.drop-actions { display: flex; align-items: center; gap: 7px; margin-top: 5px; color: #9aa39d; font-size: 10px; }
+.browse-link { padding: 0; border: 0; background: transparent; color: #34795a; font-size: inherit; font-weight: 700; cursor: pointer; }
+.browse-link:hover { color: #205d42; text-decoration: underline; }
 .file-limits { display: flex; align-items: center; gap: 8px; margin-top: 11px; color: #a0a9a2; font-size: 9px; }
 .file-limits i { width: 3px; height: 3px; border-radius: 50%; background: #bbc3bc; }
 .file-list-header { display: flex; justify-content: space-between; margin: 20px 1px 9px; color: #98a29a; font-size: 9px; font-weight: 700; letter-spacing: .65px; }

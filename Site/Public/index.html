@@ -96,13 +96,19 @@
                 </div>
                 <span class="panel-step">01 <span>/ 02</span></span>
               </div>
-              <label class="dropzone" id="dropzone" for="file-input">
-                <input id="file-input" type="file" multiple accept=".csv,.json,.md,.pdf,.txt">
+              <div class="dropzone" id="dropzone">
+                <input id="file-input" type="file" multiple accept=".csv,.json,.md,.pdf,.txt" aria-hidden="true" tabindex="-1">
+                <input id="folder-input" type="file" webkitdirectory directory multiple accept=".csv,.json,.md,.pdf,.txt" aria-hidden="true" tabindex="-1">
                 <span class="upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v4h16v-4"/></svg></span>
                 <strong>Drop your files here</strong>
-                <span class="drop-subtitle">or <span class="browse-link">browse files</span> from your computer</span>
+                <span class="drop-subtitle">Choose individual files or import a folder</span>
+                <span class="drop-actions">
+                  <button class="browse-link" id="browse-files" type="button">Browse files</button>
+                  <span>or</span>
+                  <button class="browse-link" id="browse-folder" type="button">Choose folder</button>
+                </span>
                 <span class="file-limits">CSV, JSON, PDF, MD or TXT <i></i> Up to 5 MB each</span>
-              </label>
+              </div>
               <div class="file-list-header"><span>RECENT FILES</span><span id="list-count">0 files</span></div>
               <div class="file-list" id="file-list">
                 <div class="empty-files">

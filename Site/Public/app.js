@@ -1,4 +1,5 @@
 const fileInput = document.querySelector("#file-input");
+const folderInput = document.querySelector("#folder-input");
 const dropzone = document.querySelector("#dropzone");
 const fileList = document.querySelector("#file-list");
 const chatForm = document.querySelector("#chat-form");
@@ -10,7 +11,7 @@ const keyStatus = document.querySelector("#key-status");
 const sendButton = document.querySelector("#send-button");
 const toast = document.querySelector("#toast");
 
-const state = { files: [], messages: [], toastTimer: null, modelsReady: false, modelRequest: 0 };
+const state = { files: [], processedCount: 0, messages: [], toastTimer: null, modelsReady: false, modelRequest: 0 };
 sendButton.disabled = true;
 
 function showToast(message) {
@@ -25,9 +26,8 @@ function formatFileCount(count) {
 }
 
 function renderFiles() {
-  const successful = state.files.filter((file) => !file.error);
-  document.querySelector("#processed-count").textContent = successful.length;
-  document.querySelector("#file-count").textContent = successful.length;
+  document.querySelector("#processed-count").textContent = state.processedCount;
+  document.querySelector("#file-count").textContent = state.processedCount;
   document.querySelector("#list-count").textContent = formatFileCount(state.files.length);
 
   if (!state.files.length) {
@@ -63,22 +63,44 @@ function renderFiles() {
 
 async function uploadFiles(files) {
   if (!files.length) return;
-  const formData = new FormData();
-  for (const file of files) formData.append("files", file);
-  showToast("Processing your files…");
-  try {
-    const response = await fetch("/api/process-files", { method: "POST", body: formData });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || "Could not process these files.");
-    state.files = [...result.files, ...state.files].slice(0, 12);
-    renderFiles();
-    const failed = result.files.filter((file) => file.error).length;
-    showToast(failed ? `${failed} file${failed === 1 ? "" : "s"} could not be processed.` : "Files processed and ready to analyze.");
-  } catch (error) {
-    showToast(error.message || "The backend could not process these files.");
-  } finally {
+  const allowedExtension = /\.(csv|json|md|pdf|txt)$/i;
+  const supportedFiles = files.filter((file) => allowedExtension.test(file.name));
+  const skippedCount = files.length - supportedFiles.length;
+  let failedCount = 0;
+
+  if (!supportedFiles.length) {
+    showToast("No supported files found. Choose CSV, JSON, PDF, Markdown, or text files.");
     fileInput.value = "";
+    folderInput.value = "";
+    return;
   }
+
+  if (skippedCount) showToast(`Skipping ${skippedCount} unsupported file${skippedCount === 1 ? "" : "s"}.`);
+  for (const [index, file] of supportedFiles.entries()) {
+    showToast(`Processing file ${index + 1} of ${supportedFiles.length}: ${file.name}`);
+    const formData = new FormData();
+    formData.append("files", file);
+    try {
+      const response = await fetch("/api/process-files", { method: "POST", body: formData });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "Could not process this file.");
+      const processedFile = result.files[0];
+      if (!processedFile || processedFile.error) failedCount += 1;
+      else state.processedCount += 1;
+      state.files = [processedFile || { filename: file.name, error: "No result returned." }, ...state.files].slice(0, 12);
+      renderFiles();
+    } catch (error) {
+      failedCount += 1;
+      state.files = [{ filename: file.name, error: error.message || "Could not process this file." }, ...state.files].slice(0, 12);
+      renderFiles();
+    }
+  }
+  fileInput.value = "";
+  folderInput.value = "";
+  const totalFailures = failedCount + skippedCount;
+  showToast(totalFailures
+    ? `Processed ${supportedFiles.length - failedCount} of ${files.length} files; ${totalFailures} skipped or failed.`
+    : `All ${supportedFiles.length} files processed successfully.`);
 }
 
 function addMessage(role, content) {
@@ -179,6 +201,9 @@ async function loadModels() {
 }
 
 fileInput.addEventListener("change", () => uploadFiles([...fileInput.files]));
+folderInput.addEventListener("change", () => uploadFiles([...folderInput.files]));
+document.querySelector("#browse-files").addEventListener("click", () => fileInput.click());
+document.querySelector("#browse-folder").addEventListener("click", () => folderInput.click());
 dropzone.addEventListener("dragover", (event) => {
   event.preventDefault();
   dropzone.classList.add("drag-over");
