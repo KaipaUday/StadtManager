@@ -91,6 +91,20 @@
             </article>
           </section>
 
+          <section class="maintenance-overview" aria-labelledby="maintenance-title">
+            <div class="maintenance-overview-heading">
+              <div>
+                <div class="section-kicker">BUILDING HEALTH</div>
+                <h2 id="maintenance-title">Maintenance &amp; alerts</h2>
+                <p>AI findings stay suggestions until you confirm them. Track upcoming repairs here.</p>
+              </div>
+              <span class="maintenance-summary" id="maintenance-summary">No open items</span>
+            </div>
+            <div id="maintenance-list" class="maintenance-list">
+              <div class="maintenance-empty">No repair suggestions yet. Upload a building report to look for repairs.</div>
+            </div>
+          </section>
+
           <section class="work-grid">
             <article class="panel files-panel" id="files">
               <div class="panel-heading">
@@ -154,7 +168,7 @@
               </div>
               <form class="chat-form" id="chat-form">
                 <textarea id="chat-input" rows="1" maxlength="4000" placeholder="Ask a question about your data..." aria-label="Message the AI assistant"></textarea>
-                <div class="chat-form-bottom"><span class="privacy-hint"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg> Your API key stays on this server</span><button class="send-button" id="send-button" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>Send</span></button></div>
+                <div class="chat-form-bottom"><span class="privacy-hint"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg> Key stays here; saved building data and uploaded text go to the selected AI provider</span><button class="send-button" id="send-button" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>Send</span></button></div>
               </form>
             </article>
           </section>
@@ -171,12 +185,16 @@
             <div class="review-grid">
               <div class="review-form">
                 <div class="form-field">
-                  <label for="object-name">Building name <span class="required-mark">Required</span></label>
-                  <input id="object-name" maxlength="200" required placeholder="Enter the building name">
+                  <label for="object-name">Building name <span class="optional-mark">Optional</span></label>
+                  <input id="object-name" maxlength="200" placeholder="Optional label">
                 </div>
                 <div class="form-field">
-                  <label for="building-address">Address <span class="optional-mark">Optional</span></label>
-                  <input id="building-address" maxlength="500" placeholder="Street, city">
+                  <label for="street-name">Street name <span class="required-mark">Required</span></label>
+                  <input id="street-name" maxlength="150" required placeholder="e.g. Hauptstraße">
+                </div>
+                <div class="form-field">
+                  <label for="house-number">House number <span class="required-mark">Required</span></label>
+                  <input id="house-number" maxlength="30" required placeholder="e.g. 12a">
                 </div>
                 <div class="location-heading">
                   <span>Map coordinates <span class="optional-mark">Optional</span></span>
@@ -191,6 +209,8 @@
                   <button class="secondary-button compact" id="add-field" type="button">+ Add field</button>
                 </div>
                 <div class="review-fields" id="review-fields"></div>
+                <div id="extraction-maintenance" class="extraction-maintenance" hidden></div>
+                <div id="merge-review" class="merge-review" hidden></div>
                 <div class="extraction-notice" id="extraction-notice" role="status" hidden></div>
                 <div class="review-actions">
                   <span class="review-status" id="review-status"></span>
@@ -213,7 +233,7 @@
               <div>
                 <div class="section-kicker">CITY TWIN</div>
                 <h2 id="map-title">Coburg in 3D</h2>
-                <p>Accepted buildings with coordinates appear on the map. Use the map picker to place a record.</p>
+                <p>Click a pin to open its PDF images and 3D model. Search saved buildings by name, address, or property.</p>
               </div>
               <span class="map-building-count" id="building-count">0 saved buildings</span>
             </div>
@@ -221,6 +241,7 @@
               <div id="city-map-canvas" class="city-map" role="application" aria-label="Interactive 3D map of Coburg"></div>
               <aside class="map-records" aria-label="Saved buildings">
                 <div class="map-records-heading"><strong>Saved buildings</strong><span>DATABASE</span></div>
+                <input id="building-search" class="building-search" type="search" placeholder="Search buildings and properties" aria-label="Search saved buildings">
                 <div id="building-list" class="building-list">
                   <div class="map-empty">Accepted building records will appear here.</div>
                 </div>
@@ -229,11 +250,57 @@
             <p class="map-attribution">Map data © OpenStreetMap contributors · Tiles by OpenFreeMap</p>
           </section>
 
+          <dialog id="building-detail-dialog" class="building-detail-dialog" aria-labelledby="building-detail-title">
+            <div class="building-detail-shell">
+              <header class="building-detail-heading">
+                <div>
+                  <div class="section-kicker">BUILDING DIGITAL TWIN</div>
+                  <h2 id="building-detail-title">Building</h2>
+                  <p id="building-detail-address"></p>
+                  <small id="building-detail-uid"></small>
+                </div>
+                <button id="building-detail-close" class="secondary-button" type="button" aria-label="Close building details">Close</button>
+              </header>
+              <div id="building-detail-warning" class="extraction-notice" hidden></div>
+              <section class="building-detail-subsection">
+                <div class="detail-section-heading"><h3>Building files</h3><span id="building-document-count"></span></div>
+                <div id="building-document-list" class="building-document-list"></div>
+              </section>
+              <section class="building-detail-subsection">
+                <div class="detail-section-heading"><h3>Maintenance &amp; alerts</h3><span>Review required</span></div>
+                <div id="building-maintenance-list" class="maintenance-list"></div>
+              </section>
+              <div class="building-detail-grid">
+                <section class="building-detail-column">
+                  <div class="detail-section-heading"><h3>Images from the PDF</h3><span id="building-image-count"></span></div>
+                  <div id="building-image-gallery" class="building-image-gallery"></div>
+                </section>
+                <section class="building-detail-column">
+                  <div class="detail-section-heading"><h3>Simplified 3D model</h3><span>AI estimate</span></div>
+                  <div id="twin-viewer" class="twin-viewer">Generate a draft from a saved PDF floor plan.</div>
+                  <p class="twin-provider-note">Generating a draft sends up to five rendered PDF pages to the selected AI provider.</p>
+                  <p id="twin-scale-note" class="twin-scale-note">The generated geometry is approximate and should be checked against the source plan.</p>
+                  <div id="twin-room-list" class="twin-room-list" role="list" aria-label="Editable rooms in the 3D model"></div>
+                  <div class="twin-actions">
+                    <label class="sr-only" for="twin-source-document">PDF source document</label>
+                    <select id="twin-source-document" class="provider-select" aria-label="PDF source document"></select>
+                    <button id="generate-twin" class="secondary-button" type="button">Generate 3D draft</button>
+                    <button id="save-twin" class="primary-button" type="button" hidden>Save reviewed model</button>
+                    <span id="twin-status" class="review-status" role="status"></span>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </dialog>
+
           <footer class="footer"><span><span class="footer-mark">S</span> StadtManager <span class="footer-divider">·</span> A clearer view of your city</span><span>Built for thoughtful decisions.</span></footer>
         </div>
       </main>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="importmap">
+      {"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}
+    </script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="/app.js" defer></script>
   </body>

@@ -18,14 +18,51 @@ system, and accept each record before it is saved.
 
 Accepted building records and their original files are stored locally in
 `data/stadtmanager.sqlite3` (the files are stored as database BLOBs). Unaccepted
-or skipped files aren't saved. The city map is centered on Coburg and uses
-OpenFreeMap/OpenStreetMap map tiles, so an internet connection is required.
+or skipped files aren't saved. Street name and house number identify a building;
+the optional building name is only a display label. A stable UUID is assigned
+to each building, and later uploads for the same normalized street and number
+are attached to that building instead of creating another one. Each source file
+remains available from the building details. If an upload conflicts with a
+saved property value, choose whether to keep or replace it before the merge is
+saved; replaced values are retained in the database history.
+
+The city map is centered on Coburg and uses OpenFreeMap/OpenStreetMap map tiles,
+so an internet connection is required.
+Search the saved-object list by name, address, or property; opening a pin or
+list result shows the attached files, stored PDF images, maintenance findings,
+and any saved 3D model.
+
+For saved PDFs, the app renders up to eight page previews and extracts
+compatible embedded images for the building detail view. Selecting **Generate
+3D draft** sends up to five rendered pages to the selected AI provider. Review
+the approximate room layout before saving it. The model is stored as
+`stadtmanager-twin-v1` JSON in SQLite (`building_twins.model_json`): floors,
+rooms, positions, dimensions, units, and confidence. If the PDF has no usable
+scale, dimensions are relative rather than meters. This is a simplified visual
+model, not an IFC/BIM model or an engineering-accurate representation.
 
 To use the AI assistant, set either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
 in the server's environment. Select the matching provider in the website.
 Optional `ANTHROPIC_MODEL` and `OPENAI_MODEL` variables override the default
 model names. The UI checks the key and loads available chat models before
 showing the model selector. Keys are never sent to or displayed by the browser.
+Each chat request includes saved building details and any reviewed digital-twin
+geometry from SQLite (up to the newest 100 buildings and a 14,000-character
+limit), along with any text from files currently uploaded in the workspace.
+Original stored file bytes are not sent as part of the database context. This
+information is sent to the selected AI provider; the assistant is told when the
+database context has been truncated. When creating a 3D draft, rendered plan
+pages are also sent to that provider.
+
+When a document contains explicit repair, replacement, inspection, or scheduled
+maintenance information, the AI may extract an evidence-backed suggestion.
+These findings appear on the dashboard as **Needs review** and do not become
+active alerts until a user confirms them. Findings without a supporting excerpt
+are not saved. Confirmed alerts can be dismissed or marked repaired. Scanned
+PDFs without selectable text need OCR or manual review before the AI can extract
+maintenance findings. Existing databases receive a migration that assigns
+stable UIDs and parses unambiguous street/number addresses; ambiguous legacy
+addresses are preserved for review rather than automatically merged.
 
 With the server running, check a provider key and list models without printing
 the key itself:
