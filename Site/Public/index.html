@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -29,6 +30,10 @@
             <svg viewBox="0 0 24 24"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10z"/><path d="M13 3v7h7M8 15h8M8 18h5"/></svg>
             File workspace <span class="nav-count" id="file-count">0</span>
           </a>
+          <a class="nav-item" href="#city-map">
+            <svg viewBox="0 0 24 24"><path d="m3 7 6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13m6-10v13"/></svg>
+            City map
+          </a>
           <a class="nav-item" href="#assistant">
             <svg viewBox="0 0 24 24"><path d="M12 3 14.2 9.8 21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z"/><path d="m19 3 .8 2.2L22 6l-2.2.8L19 9l-.8-2.2L16 6l2.2-.8L19 3z"/></svg>
             AI assistant
@@ -37,7 +42,7 @@
         <div class="sidebar-bottom">
           <div class="secure-note">
             <span class="secure-icon"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 5v2"/></svg></span>
-            <div><strong>Your data stays yours</strong><small>Files are processed in memory.</small></div>
+            <div><strong>Your data stays yours</strong><small>Saved locally only after approval.</small></div>
           </div>
           <div class="profile">
             <span class="avatar">SM</span>
@@ -70,14 +75,14 @@
 
           <section class="stat-grid" aria-label="Workspace summary">
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-icon mint"><svg viewBox="0 0 24 24"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10z"/><path d="M13 3v7h7"/></svg></span><span class="stat-label">FILES PROCESSED</span></div>
+              <div class="stat-top"><span class="stat-icon mint"><svg viewBox="0 0 24 24"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10z"/><path d="M13 3v7h7"/></svg></span><span class="stat-label">SAVED BUILDINGS</span></div>
               <div class="stat-value" id="processed-count">0</div>
-              <div class="stat-foot">Files in this session</div>
+              <div class="stat-foot">Accepted records in database</div>
             </article>
             <article class="stat-card">
               <div class="stat-top"><span class="stat-icon lavender"><svg viewBox="0 0 24 24"><path d="M12 3 14.2 9.8 21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z"/></svg></span><span class="stat-label">AI AGENT</span></div>
-              <div class="stat-value stat-word">Ready <span class="ready-dot"></span></div>
-              <div class="stat-foot">Connects with your API key</div>
+              <div class="stat-value stat-word" id="agent-state">Checking</div>
+              <div class="stat-foot" id="agent-foot">Verifying provider access</div>
             </article>
             <article class="stat-card">
               <div class="stat-top"><span class="stat-icon peach"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h17"/><path d="m7 15 4-4 3 2 6-7"/></svg></span><span class="stat-label">SUPPORTED DATA</span></div>
@@ -153,11 +158,83 @@
               </form>
             </article>
           </section>
+
+          <section class="review-panel" id="review-panel" hidden aria-labelledby="review-title">
+            <div class="review-heading">
+              <div>
+                <div class="section-kicker">VERIFY BEFORE SAVING</div>
+                <h2 id="review-title">Review building data</h2>
+                <p id="review-progress">Extracted details are suggestions. Confirm or edit them before saving.</p>
+              </div>
+              <button class="secondary-button" id="skip-file" type="button">Skip this file</button>
+            </div>
+            <div class="review-grid">
+              <div class="review-form">
+                <div class="form-field">
+                  <label for="object-name">Building name <span class="required-mark">Required</span></label>
+                  <input id="object-name" maxlength="200" required placeholder="Enter the building name">
+                </div>
+                <div class="form-field">
+                  <label for="building-address">Address <span class="optional-mark">Optional</span></label>
+                  <input id="building-address" maxlength="500" placeholder="Street, city">
+                </div>
+                <div class="location-heading">
+                  <span>Map coordinates <span class="optional-mark">Optional</span></span>
+                  <button class="text-button" id="pick-location" type="button">Pick on map</button>
+                </div>
+                <div class="coordinate-fields">
+                  <div class="form-field"><label for="building-latitude">Latitude</label><input id="building-latitude" inputmode="decimal" placeholder="50.264300"></div>
+                  <div class="form-field"><label for="building-longitude">Longitude</label><input id="building-longitude" inputmode="decimal" placeholder="10.964400"></div>
+                </div>
+                <div class="field-list-heading">
+                  <div><strong>Building details</strong><small>AI-extracted fields can be edited.</small></div>
+                  <button class="secondary-button compact" id="add-field" type="button">+ Add field</button>
+                </div>
+                <div class="review-fields" id="review-fields"></div>
+                <div class="extraction-notice" id="extraction-notice" role="status" hidden></div>
+                <div class="review-actions">
+                  <span class="review-status" id="review-status"></span>
+                  <button class="primary-button" id="accept-building" type="button">Accept &amp; save building</button>
+                </div>
+              </div>
+              <div class="document-preview">
+                <div class="document-preview-heading">
+                  <strong id="preview-filename">Source document</strong>
+                  <span id="preview-kind"></span>
+                </div>
+                <iframe id="pdf-preview" title="Uploaded PDF preview" hidden></iframe>
+                <pre id="text-preview" hidden></pre>
+              </div>
+            </div>
+          </section>
+
+          <section class="map-section" id="city-map" aria-labelledby="map-title">
+            <div class="map-section-heading">
+              <div>
+                <div class="section-kicker">CITY TWIN</div>
+                <h2 id="map-title">Coburg in 3D</h2>
+                <p>Accepted buildings with coordinates appear on the map. Use the map picker to place a record.</p>
+              </div>
+              <span class="map-building-count" id="building-count">0 saved buildings</span>
+            </div>
+            <div class="map-layout">
+              <div id="city-map-canvas" class="city-map" role="application" aria-label="Interactive 3D map of Coburg"></div>
+              <aside class="map-records" aria-label="Saved buildings">
+                <div class="map-records-heading"><strong>Saved buildings</strong><span>DATABASE</span></div>
+                <div id="building-list" class="building-list">
+                  <div class="map-empty">Accepted building records will appear here.</div>
+                </div>
+              </aside>
+            </div>
+            <p class="map-attribution">Map data © OpenStreetMap contributors · Tiles by OpenFreeMap</p>
+          </section>
+
           <footer class="footer"><span><span class="footer-mark">S</span> StadtManager <span class="footer-divider">·</span> A clearer view of your city</span><span>Built for thoughtful decisions.</span></footer>
         </div>
       </main>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="/app.js" defer></script>
   </body>
 </html>

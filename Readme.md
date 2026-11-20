@@ -13,7 +13,13 @@ python -m uvicorn app:app --app-dir Site --reload
 Open <http://127.0.0.1:8000>. Press `Ctrl+C` to stop the server. The site
 supports individual files or whole folders containing CSV, JSON, PDF,
 Markdown, and text files up to 5 MB each. Supported files are processed one
-at a time in memory and aren't saved by the app.
+at a time. Review extracted building details, add categories such as heating
+system, and accept each record before it is saved.
+
+Accepted building records and their original files are stored locally in
+`data/stadtmanager.sqlite3` (the files are stored as database BLOBs). Unaccepted
+or skipped files aren't saved. The city map is centered on Coburg and uses
+OpenFreeMap/OpenStreetMap map tiles, so an internet connection is required.
 
 To use the AI assistant, set either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
 in the server's environment. Select the matching provider in the website.
@@ -65,8 +71,7 @@ Save and close the editor, then load the settings into the current terminal:
 source ~/.zshrc
 ```
 
-New terminal windows will load these settings automatically. The `DB_*`
-examples are placeholders for future database-backed features; the current
-app does not connect to a database. The variable names above are common
-conventions and must match what an application reads. If a database uses a
-single connection string, configure that instead (for example, `DATABASE_URL`).
+New terminal windows will load these settings automatically. The current app
+uses local SQLite, so the `DB_*` examples aren't used. Set
+`STADTMANAGER_DB_PATH` if you want to store the SQLite database at a different
+local path.
