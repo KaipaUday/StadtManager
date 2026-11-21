@@ -42,6 +42,26 @@ const state = {
 };
 sendButton.disabled = true;
 
+// Keep in sync with Site/file_formats.py (checked by tests/test_file_formats.py).
+const SUPPORTED_EXTENSIONS = [
+  "7z", "bpn", "cdr", "csv", "d81", "d83", "d84", "db", "doc", "docx", "dos", "dot", "dwg", "dxf",
+  "gan", "gif", "gsm", "htm", "html", "info", "ini", "jpeg", "jpg", "json", "lck", "lnk", "lwi",
+  "md", "mov", "msg", "p81", "p83", "pdf", "pla", "pln", "png", "pptx", "py", "rtf", "sample",
+  "sgc", "shx", "tif", "tiff", "tmp", "tpl", "txt", "wbk", "x81", "x82", "x83", "x84", "xls",
+  "xlsm", "xlsx", "xml", "zip",
+];
+const BROWSER_IMAGE_EXTENSIONS = ["gif", "jpeg", "jpg", "png"];
+const RENDERABLE_EXTENSIONS = ["gif", "jpeg", "jpg", "pdf", "png", "tif", "tiff"];
+
+function fileExtension(name) {
+  const match = /\.([^./\\]+)$/.exec(name || "");
+  return match ? match[1].toLowerCase() : "";
+}
+
+function isSupportedFile(name) {
+  return SUPPORTED_EXTENSIONS.includes(fileExtension(name));
+}
+
 const translations = {
   en: {
     workspace: "Workspace",
@@ -63,6 +83,9 @@ const translations = {
     drop: "Drop your files here",
     browseFiles: "Browse files",
     browseFolder: "Choose folder",
+    fileLimits: "PDF, Office, images, CAD, GAEB, e-mail, ZIP and more",
+    fileSize: "Up to 100 MB each",
+    formatsFoot: "PDF, Office, images, CAD, GAEB, e-mail, archives",
     aiPartner: "YOUR AI PARTNER",
     ask: "Ask StadtManager",
     mapTitle: "Coburg in 3D",
@@ -88,6 +111,9 @@ const translations = {
     drop: "Legen Sie Ihre Dateien hier ab",
     browseFiles: "Dateien auswählen",
     browseFolder: "Ordner auswählen",
+    fileLimits: "PDF, Office, Bilder, CAD, GAEB, E-Mail, ZIP und mehr",
+    fileSize: "Bis zu 100 MB pro Datei",
+    formatsFoot: "PDF, Office, Bilder, CAD, GAEB, E-Mail, Archive",
     aiPartner: "IHR KI-PARTNER",
     ask: "StadtManager fragen",
     mapTitle: "Coburg in 3D",
@@ -122,6 +148,9 @@ function applyLanguage(language) {
     "[data-i18n=\"drop\"]": t.drop,
     "[data-i18n=\"browseFiles\"]": t.browseFiles,
     "[data-i18n=\"browseFolder\"]": t.browseFolder,
+    "[data-i18n=\"fileLimits\"]": t.fileLimits,
+    "[data-i18n=\"fileSize\"]": t.fileSize,
+    "[data-i18n=\"formatsFoot\"]": t.formatsFoot,
     "[data-i18n=\"aiPartner\"]": t.aiPartner,
     "[data-i18n=\"ask\"]": t.ask,
     "[data-i18n=\"mapTitle\"]": t.mapTitle,
@@ -190,16 +219,24 @@ function renderFiles() {
 
 function queueFiles(files) {
   if (!files.length) return;
-  const allowedExtension = /\.(csv|json|md|pdf|txt)$/i;
-  const supportedFiles = files.filter((file) => allowedExtension.test(file.name));
-  const skippedCount = files.length - supportedFiles.length;
+  const supportedFiles = files.filter((file) => isSupportedFile(file.name));
+  const skippedFiles = files.filter((file) => !isSupportedFile(file.name));
+  const skippedTypes = [...new Set(skippedFiles.map((file) => fileExtension(file.name) || "no extension"))]
+    .slice(0, 6)
+    .map((extension) => (extension === "no extension" ? extension : `.${extension}`))
+    .join(", ");
   if (!supportedFiles.length) {
-    showToast("No supported files found. Choose CSV, JSON, PDF, Markdown, or text files.");
+    showToast(
+      `No supported files found${skippedTypes ? ` (${skippedTypes})` : ""}. `
+      + `${SUPPORTED_EXTENSIONS.length} formats are supported, including PDF, Office, images, CAD, GAEB, e-mail and ZIP.`,
+    );
     fileInput.value = "";
     folderInput.value = "";
     return;
   }
-  if (skippedCount) showToast(`Skipping ${skippedCount} unsupported file${skippedCount === 1 ? "" : "s"}.`);
+  if (skippedFiles.length) {
+    showToast(`Skipping ${skippedFiles.length} unsupported file${skippedFiles.length === 1 ? "" : "s"} (${skippedTypes}).`);
+  }
   state.importQueue.push(...supportedFiles);
   state.importTotal += supportedFiles.length;
   fileInput.value = "";
@@ -274,18 +311,33 @@ function createFieldRow(categoryName = "", value = "") {
 
 function displayPreview(file, result = null) {
   const pdfPreview = document.querySelector("#pdf-preview");
+  const imagePreview = document.querySelector("#image-preview");
   const textPreview = document.querySelector("#text-preview");
+  const extension = fileExtension(file.name);
   document.querySelector("#preview-filename").textContent = file.name;
-  document.querySelector("#preview-kind").textContent = result?.kind || file.name.split(".").pop().toUpperCase();
+  document.querySelector("#preview-kind").textContent = result?.kind || extension.toUpperCase();
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
-  if (file.name.toLowerCase().endsWith(".pdf")) {
+  state.previewUrl = null;
+  if (extension === "pdf") {
     state.previewUrl = URL.createObjectURL(file);
     pdfPreview.src = state.previewUrl;
     pdfPreview.hidden = false;
+    imagePreview.removeAttribute("src");
+    imagePreview.hidden = true;
+    textPreview.hidden = true;
+  } else if (BROWSER_IMAGE_EXTENSIONS.includes(extension)) {
+    state.previewUrl = URL.createObjectURL(file);
+    imagePreview.src = state.previewUrl;
+    imagePreview.alt = `Preview of ${file.name}`;
+    imagePreview.hidden = false;
+    pdfPreview.removeAttribute("src");
+    pdfPreview.hidden = true;
     textPreview.hidden = true;
   } else {
     pdfPreview.removeAttribute("src");
     pdfPreview.hidden = true;
+    imagePreview.removeAttribute("src");
+    imagePreview.hidden = true;
     const preview = result?.preview;
     textPreview.textContent = typeof preview === "string" ? preview : JSON.stringify(preview ?? "Extracting document…", null, 2);
     textPreview.hidden = false;
@@ -611,7 +663,7 @@ async function acceptBuilding() {
     if (!result.merged) state.processedCount += 1;
     state.files = [{
       filename: result.file_name,
-      kind: state.currentExtraction?.kind || file.name.split(".").pop().toUpperCase(),
+      kind: state.currentExtraction?.kind || fileExtension(file.name).toUpperCase(),
       details: result.merged ? "Added to existing building" : "Saved in database",
       content: state.currentExtraction?.preview || "",
     }, ...state.files].slice(0, 12);
@@ -1105,7 +1157,9 @@ async function openBuildingDetails(buildingId) {
     }
 
     const pdfDocuments = documents.filter((source) =>
-      source.mime_type === "application/pdf" || /\.pdf$/i.test(source.file_name),
+      source.mime_type === "application/pdf"
+      || /^image\/(jpeg|png|gif|tiff)$/.test(source.mime_type || "")
+      || RENDERABLE_EXTENSIONS.includes(fileExtension(source.file_name)),
     );
     const sourceSelect = document.querySelector("#twin-source-document");
     sourceSelect.replaceChildren();
