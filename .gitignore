@@ -1,3 +1,2 @@
 .venv
 data/*.sqlite3*
-Site/__pycache__/*.pyc
