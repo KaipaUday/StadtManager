@@ -281,6 +281,9 @@ h1 span { color: var(--green); }
 .twin-room-fields label { display: grid; gap: 3px; color: #879188; font-size: 8px; }
 .twin-room-fields input { min-width: 0; padding: 5px; border: 1px solid #e3e9e2; border-radius: 5px; background: #fff; color: #435148; font-size: 9px; }
 .twin-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf0eb; }
+.twin-actions .twin-source-label { flex: 1 1 100%; color: #657369; font-size: 9px; font-weight: 600; }
+.twin-actions .twin-source-select { width: 100%; max-width: none; min-height: 132px; flex: 1 1 100%; padding: 7px; cursor: default; }
+.twin-source-hint { flex: 1 1 100%; color: #849087; font-size: 8px; line-height: 1.5; }
 .twin-actions [hidden] { display: none; }
 .twin-actions .review-status { flex: 1 1 100%; }
 

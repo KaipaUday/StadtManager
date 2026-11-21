@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css?v=20261121-cadmerge1">
+    <link rel="stylesheet" href="/styles.css?v=20261121-cadmerge2">
   </head>
   <body>
     <main class="auth-screen" id="auth-screen">
@@ -437,13 +437,17 @@
                 <button id="building-detail-close" class="building-detail-close" type="button" aria-label="Close building details" data-i18n-aria-label="close"><span aria-hidden="true">&times;</span></button>
               </header>
               <div id="building-detail-warning" class="extraction-notice" hidden></div>
-              <section class="building-detail-subsection">
-                <div class="detail-section-heading"><h3>Building data</h3></div>
+              <section id="building-data-section" class="building-detail-subsection building-data-section" hidden>
+                <div class="detail-section-heading">
+                  <h3>Building data</h3>
+                  <button id="building-edit-button" class="secondary-button" type="button" hidden>Edit</button>
+                </div>
                 <form id="building-edit-form" class="building-edit-form" hidden>
                   <label class="auth-field"><span>Building name</span><input id="building-edit-name" maxlength="200" required></label>
                   <div id="building-edit-fields" class="building-edit-fields"></div>
                   <div class="building-edit-actions">
                     <button class="secondary-button" id="building-add-property" type="button">Add property</button>
+                    <button class="secondary-button" id="building-edit-cancel" type="button">Cancel</button>
                     <button class="primary-button" type="submit">Save building data</button>
                     <span id="building-edit-status" class="review-status" role="status"></span>
                   </div>
@@ -466,8 +470,9 @@
                   <p id="twin-scale-note" class="twin-scale-note" data-i18n="twinScaleNote">The generated geometry is approximate and should be checked against the source plan.</p>
                   <div id="twin-room-list" class="twin-room-list" role="list" aria-label="Editable rooms in the 3D model" data-i18n-aria-label="editableRooms"></div>
                   <div class="twin-actions">
-                    <label class="sr-only" for="twin-source-document" data-i18n="twinSource">PDF source document</label>
-                    <select id="twin-source-document" class="provider-select" aria-label="PDF source document" data-i18n-aria-label="twinSource"></select>
+                    <label class="twin-source-label" for="twin-source-documents" data-i18n="twinSource">PDF drawings to use</label>
+                    <select id="twin-source-documents" class="provider-select twin-source-select" multiple size="5" aria-label="PDF drawings to use" aria-describedby="twin-source-hint" data-i18n-aria-label="twinSource"></select>
+                    <small id="twin-source-hint" class="twin-source-hint" data-i18n="twinSourceHint">Select up to five PDFs. Up to five plan pages are analyzed together.</small>
                     <button id="generate-twin" class="secondary-button" type="button" data-i18n="generateTwin">Generate 3D draft</button>
                     <button id="save-twin" class="primary-button" type="button" data-i18n="saveTwin" hidden>Save reviewed model</button>
                     <span id="twin-status" class="review-status" role="status"></span>
@@ -497,6 +502,6 @@
       {"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}
     </script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-    <script src="/app.js?v=20261121-cadmerge1" defer></script>
+    <script src="/app.js?v=20261121-cadmerge3" defer></script>
   </body>
 </html>

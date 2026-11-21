@@ -62,6 +62,8 @@ MAX_AGENT_DB_VALUES = 1_000
 MAX_AGENT_AI_RECORDS = 8
 MAX_AGENT_AI_RECORD_CONTEXT_CHARS = 8_000
 MAX_TWIN_PDF_PAGES = 8
+MAX_TWIN_SOURCE_DOCUMENTS = 5
+MAX_TWIN_ANALYSIS_PAGES = 5
 MAX_TWIN_IMAGES = 20
 MAX_TWIN_IMAGE_BYTES = 1_500_000
 MAX_TWIN_TOTAL_IMAGE_BYTES = 12 * 1024 * 1024
@@ -501,6 +503,7 @@ def initialize_database() -> None:
             CREATE TABLE IF NOT EXISTS building_twins (
                 building_id INTEGER PRIMARY KEY REFERENCES buildings(id) ON DELETE CASCADE,
                 source_document_id INTEGER REFERENCES building_documents(id) ON DELETE SET NULL,
+                source_document_ids_json TEXT NOT NULL DEFAULT '[]',
                 model_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -620,7 +623,10 @@ def initialize_database() -> None:
                 "address_key": "TEXT",
             },
             "building_assets": {"document_id": "INTEGER REFERENCES building_documents(id) ON DELETE CASCADE"},
-            "building_twins": {"source_document_id": "INTEGER REFERENCES building_documents(id) ON DELETE SET NULL"},
+            "building_twins": {
+                "source_document_id": "INTEGER REFERENCES building_documents(id) ON DELETE SET NULL",
+                "source_document_ids_json": "TEXT NOT NULL DEFAULT '[]'",
+            },
             "document_index_state": {"asset_version": "INTEGER NOT NULL DEFAULT 0"},
         }
         for table, columns in migrations.items():
@@ -1214,11 +1220,13 @@ class TwinDraftRequest(BaseModel):
     provider: Literal["openai", "anthropic"] = "anthropic"
     model: str | None = Field(default=None, min_length=1, max_length=100)
     document_id: int | None = Field(default=None, ge=1)
+    source_document_ids: list[int | None] | None = Field(default=None, max_length=MAX_TWIN_SOURCE_DOCUMENTS)
 
 
 class TwinSaveRequest(BaseModel):
     twin: dict[str, object]
     source_document_id: int | None = Field(default=None, ge=1)
+    source_document_ids: list[int | None] | None = Field(default=None, max_length=MAX_TWIN_SOURCE_DOCUMENTS)
 
 
 class MaintenanceAction(BaseModel):
@@ -1424,12 +1432,15 @@ async def generate_twin_draft(
     api_key = os.getenv(key_name)
     if not api_key:
         raise HTTPException(status_code=503, detail=f"Set {key_name} on the server to create a 3D draft.")
-    page_images = [page for page in pages if page["asset_type"] == "floorplan-page"][:5]
+    page_images = [
+        page for page in pages if page["asset_type"] == "floorplan-page"
+    ][:MAX_TWIN_ANALYSIS_PAGES]
     if not page_images:
         raise HTTPException(status_code=422, detail="No readable PDF page images are available for this building.")
 
     prompt = (
-        "Analyze these floor-plan page images and create a simplified, approximate room-block model. "
+        "Analyze these floor-plan page images from one or more drawing files and create a simplified, "
+        "approximate room-block model. "
         "Return only JSON with this shape: "
         '{"units":"m"|"relative","scale_note":"short explanation","floors":[{"level":0,'
         '"name":"Ground floor","rooms":[{"name":"Room name","x":0,"z":0,"width":4,'
@@ -1444,6 +1455,10 @@ async def generate_twin_draft(
         if provider == "anthropic":
             content: list[dict[str, object]] = []
             for page in page_images:
+                content.append({
+                    "type": "text",
+                    "text": f"Source drawing: {page.get('source_file_name', 'selected PDF')}, page {page['page_number']}.",
+                })
                 content.append({
                     "type": "image",
                     "source": {
@@ -1465,6 +1480,10 @@ async def generate_twin_draft(
         else:
             content = [{"type": "text", "text": prompt}]
             for page in page_images:
+                content.append({
+                    "type": "text",
+                    "text": f"Source drawing: {page.get('source_file_name', 'selected PDF')}, page {page['page_number']}.",
+                })
                 image_data = base64.b64encode(page["file_data"]).decode("ascii")
                 content.append({
                     "type": "image_url",
@@ -4214,14 +4233,38 @@ async def get_building_twin(
         if exists is None:
             raise HTTPException(status_code=404, detail="Building not found.")
         row = connection.execute(
-            "SELECT model_json, updated_at, source_document_id FROM building_twins WHERE building_id = ?",
+            """SELECT model_json, updated_at, source_document_id, source_document_ids_json
+               FROM building_twins WHERE building_id = ?""",
             (building_id,),
         ).fetchone()
+    source_document_ids = []
+    if row:
+        source_document_ids = json.loads(row["source_document_ids_json"] or "[]")
+        if not source_document_ids:
+            source_document_ids = [row["source_document_id"]]
     return {
         "twin": json.loads(row["model_json"]) if row else None,
         "updated_at": row["updated_at"] if row else None,
         "source_document_id": row["source_document_id"] if row else None,
+        "source_document_ids": source_document_ids,
     }
+
+
+def normalize_twin_source_ids(
+    source_document_ids: list[int | None] | None,
+    source_document_id: int | None,
+) -> list[int | None]:
+    selected_ids = source_document_ids if source_document_ids is not None else [source_document_id]
+    if not selected_ids:
+        raise HTTPException(status_code=422, detail="Choose at least one drawing PDF.")
+    if len(selected_ids) > MAX_TWIN_SOURCE_DOCUMENTS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Choose no more than {MAX_TWIN_SOURCE_DOCUMENTS} drawing PDFs.",
+        )
+    if len(set(selected_ids)) != len(selected_ids):
+        raise HTTPException(status_code=422, detail="A drawing PDF can only be selected once.")
+    return selected_ids
 
 
 @app.post("/api/buildings/{building_id}/twin/draft")
@@ -4231,61 +4274,99 @@ async def create_building_twin_draft(
     http_request: FastAPIRequest,
 ) -> dict[str, object]:
     ensure_building_access(http_request.state.user, building_id, write=True)
+    source_document_ids = normalize_twin_source_ids(
+        request.source_document_ids,
+        request.document_id,
+    )
+    sources: list[dict[str, object]] = []
     with database() as connection:
-        if request.document_id is None:
-            building = connection.execute(
-                "SELECT file_name, mime_type, file_data FROM buildings WHERE id = ?",
-                (building_id,),
-            ).fetchone()
-        else:
-            building = connection.execute(
-                """SELECT file_name, mime_type, file_data FROM building_documents
-                   WHERE building_id = ? AND id = ?""",
-                (building_id, request.document_id),
-            ).fetchone()
-    if building is None:
-        raise HTTPException(status_code=404, detail="Building or selected document not found.")
-    if building["mime_type"] not in RENDERABLE_MIME_TYPES:
-        raise HTTPException(
-            status_code=415,
-            detail="3D drafts can currently be created from PDF floor plans and scanned plan images.",
+        for document_id in source_document_ids:
+            if document_id is None:
+                source = connection.execute(
+                    """SELECT file_name, mime_type, file_data FROM buildings WHERE id = ?""",
+                    (building_id,),
+                ).fetchone()
+            else:
+                source = connection.execute(
+                    """SELECT file_name, mime_type, file_data FROM building_documents
+                       WHERE building_id = ? AND id = ?""",
+                    (building_id, document_id),
+                ).fetchone()
+            if source is None:
+                raise HTTPException(status_code=404, detail="Building or selected document not found.")
+            sources.append({**dict(source), "document_id": document_id})
+
+    page_groups: list[list[dict[str, object]]] = []
+    warnings: list[str] = []
+    for source in sources:
+        if source["mime_type"] not in RENDERABLE_MIME_TYPES:
+            raise HTTPException(
+                status_code=415,
+                detail="3D drafts can currently be created from PDF floor plans and scanned plan images.",
+            )
+        is_pdf = source["mime_type"] == "application/pdf"
+        try:
+            assets, source_warnings = render_pdf_assets(
+                renderable_pdf(bytes(source["file_data"]), str(source["mime_type"]), str(source["file_name"])),
+                include_embedded_images=is_pdf,
+            )
+        except (RuntimeError, ValueError) as error:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Could not render {source['file_name']}.",
+            ) from error
+        warnings.extend(source_warnings)
+        source_pages = [asset for asset in assets if asset["asset_type"] == "floorplan-page"]
+        for page in source_pages:
+            page["source_file_name"] = source["file_name"]
+            page["source_document_id"] = source["document_id"]
+        if not source_pages:
+            warnings.append(f"No plan pages could be rendered from {source['file_name']}.")
+        page_groups.append(source_pages)
+
+    analysis_pages: list[dict[str, object]] = []
+    for page_index in range(max((len(group) for group in page_groups), default=0)):
+        for group in page_groups:
+            if page_index < len(group) and len(analysis_pages) < MAX_TWIN_ANALYSIS_PAGES:
+                analysis_pages.append(group[page_index])
+    total_plan_pages = sum(len(group) for group in page_groups)
+    if total_plan_pages > len(analysis_pages):
+        warnings.append(
+            f"Only {MAX_TWIN_ANALYSIS_PAGES} plan pages are sent across the selected drawings."
         )
-    is_pdf = building["mime_type"] == "application/pdf"
-    try:
-        assets, warnings = render_pdf_assets(
-            renderable_pdf(bytes(building["file_data"]), building["mime_type"], building["file_name"]),
-            include_embedded_images=is_pdf,
-        )
-    except (RuntimeError, ValueError) as error:
-        raise HTTPException(
-            status_code=422,
-            detail="Could not render pages or images from this PDF." if is_pdf else "Could not render this image.",
-        ) from error
+
     selected_model = request.model or (
         os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
         if request.provider == "anthropic"
         else os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
     )
-    twin = await generate_twin_draft(assets, request.provider, selected_model)
-    analyzed_pages = sum(asset["asset_type"] == "floorplan-page" for asset in assets[:5])
+    twin = await generate_twin_draft(analysis_pages, request.provider, selected_model)
+    analyzed_pages = len(analysis_pages)
+    analyzed_documents = len({page["source_document_id"] for page in analysis_pages})
+    legacy_source_document_id = source_document_ids[0] if len(source_document_ids) == 1 else None
+    source_file_names = [str(source["file_name"]) for source in sources]
     save_ai_generated_record(
         "twin_draft",
         request.provider,
         selected_model,
-        str(building["file_name"]),
+        ", ".join(source_file_names),
         {
-            "source_document_id": request.document_id,
+            "source_document_id": legacy_source_document_id,
+            "source_document_ids": source_document_ids,
+            "source_file_names": source_file_names,
             "analyzed_pages": analyzed_pages,
-            "warnings": warnings,
+            "warnings": list(dict.fromkeys(warnings)),
             "twin": twin,
         },
         building_id=building_id,
     )
     return {
         "twin": twin,
-        "source_document_id": request.document_id,
+        "source_document_id": legacy_source_document_id,
+        "source_document_ids": source_document_ids,
         "analyzed_pages": analyzed_pages,
-        "warnings": warnings,
+        "analyzed_documents": analyzed_documents,
+        "warnings": list(dict.fromkeys(warnings)),
     }
 
 
@@ -4296,6 +4377,10 @@ async def save_building_twin(
     http_request: FastAPIRequest,
 ) -> dict[str, object]:
     ensure_building_access(http_request.state.user, building_id, write=True)
+    source_document_ids = normalize_twin_source_ids(
+        request.source_document_ids,
+        request.source_document_id,
+    )
     try:
         twin = validate_twin_model(request.twin)
     except ValueError as error:
@@ -4305,23 +4390,41 @@ async def save_building_twin(
         exists = connection.execute("SELECT id FROM buildings WHERE id = ?", (building_id,)).fetchone()
         if exists is None:
             raise HTTPException(status_code=404, detail="Building not found.")
-        if request.source_document_id is not None:
+        for document_id in source_document_ids:
+            if document_id is None:
+                continue
             source_document = connection.execute(
                 "SELECT id FROM building_documents WHERE id = ? AND building_id = ?",
-                (request.source_document_id, building_id),
+                (document_id, building_id),
             ).fetchone()
             if source_document is None:
-                raise HTTPException(status_code=422, detail="The selected twin source does not belong to this building.")
+                raise HTTPException(status_code=422, detail="A selected twin source does not belong to this building.")
+        legacy_source_document_id = (
+            source_document_ids[0]
+            if len(source_document_ids) == 1
+            else next((document_id for document_id in source_document_ids if document_id is not None), None)
+        )
         connection.execute(
-            """INSERT INTO building_twins (building_id, source_document_id, model_json)
-               VALUES (?, ?, ?)
+            """INSERT INTO building_twins
+               (building_id, source_document_id, source_document_ids_json, model_json)
+               VALUES (?, ?, ?, ?)
                ON CONFLICT(building_id) DO UPDATE SET
                    source_document_id = excluded.source_document_id,
+                   source_document_ids_json = excluded.source_document_ids_json,
                    model_json = excluded.model_json,
                    updated_at = CURRENT_TIMESTAMP""",
-            (building_id, request.source_document_id, serialized),
+            (
+                building_id,
+                legacy_source_document_id,
+                json.dumps(source_document_ids),
+                serialized,
+            ),
         )
-    return {"twin": twin, "source_document_id": request.source_document_id}
+    return {
+        "twin": twin,
+        "source_document_id": legacy_source_document_id,
+        "source_document_ids": source_document_ids,
+    }
 
 
 @app.post("/api/agent/chat", response_model=ChatResponse)

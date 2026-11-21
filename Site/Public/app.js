@@ -13,6 +13,7 @@ const toast = document.querySelector("#toast");
 const buildingFilesInput = document.querySelector("#building-files-input");
 const buildingDrawingInput = document.querySelector("#building-drawing-input");
 buildingFilesInput.accept = fileInput.accept;
+const MAX_TWIN_SOURCE_DOCUMENTS = 5;
 
 const state = {
   files: [],
@@ -38,7 +39,7 @@ const state = {
   pickingLocation: false,
   activeBuildingId: null,
   twinDraft: null,
-  twinDraftSourceDocumentId: null,
+  twinDraftSourceDocumentIds: [],
   threePromise: null,
   twinViewer: null,
   addressVerified: false,
@@ -132,7 +133,7 @@ const translations = {
     suggestionSummary: "Summarize my files",
     chatPlaceholder: "Ask a question about your data...",
     chatAria: "Message the AI assistant",
-    privacyHint: "Key stays here; saved building data and uploaded text go to the selected AI provider",
+    privacyHint: "A limited, role-scoped SQLite summary and matching excerpts go to the AI provider; the database file stays local.",
     send: "Send",
     verifyBeforeSaving: "VERIFY BEFORE SAVING",
     reviewBuilding: "Review building data",
@@ -202,7 +203,11 @@ const translations = {
     twinProviderNote: "Generating a draft sends up to five rendered PDF pages to the selected AI provider.",
     twinScaleNote: "The generated geometry is approximate and should be checked against the source plan.",
     editableRooms: "Editable rooms in the 3D model",
-    twinSource: "PDF source document",
+    twinSource: "PDF drawings to use",
+    twinSourceHint: "Select up to five PDFs (Ctrl/Cmd-click for multiple). Up to five plan pages are analyzed together.",
+    tooManyTwinSources: "Select no more than five drawing PDFs.",
+    autoSelectedTwinSourceLimit: "Only the first five uploaded PDFs are selected. Adjust the selection below.",
+    selectTwinSource: "Select at least one drawing PDF.",
     generateTwin: "Generate 3D draft",
     saveTwin: "Save reviewed model",
     calendar: "Calendar",
@@ -287,7 +292,7 @@ const translations = {
     suggestionSummary: "Fassen Sie meine Dateien zusammen",
     chatPlaceholder: "Stellen Sie eine Frage zu Ihren Daten …",
     chatAria: "Nachricht an den KI-Assistenten",
-    privacyHint: "Der Schlüssel bleibt hier; gespeicherte Gebäudedaten und Dateitexte werden an den ausgewählten KI-Anbieter gesendet",
+    privacyHint: "Eine begrenzte, rollenbezogene SQLite-Zusammenfassung und passende Auszüge werden an den KI-Anbieter gesendet; die Datenbankdatei bleibt lokal.",
     send: "Senden",
     verifyBeforeSaving: "VOR DEM SPEICHERN PRÜFEN",
     reviewBuilding: "Gebäudedaten prüfen",
@@ -357,7 +362,11 @@ const translations = {
     twinProviderNote: "Für einen Entwurf werden bis zu fünf gerenderte PDF-Seiten an den ausgewählten KI-Anbieter gesendet.",
     twinScaleNote: "Die Geometrie ist ungefähr und sollte anhand des Quelldokuments geprüft werden.",
     editableRooms: "Bearbeitbare Räume im 3D-Modell",
-    twinSource: "PDF-Quelldokument",
+    twinSource: "Zu verwendende PDF-Zeichnungen",
+    twinSourceHint: "Wählen Sie bis zu fünf PDFs (Strg/Cmd-Klick für mehrere). Insgesamt werden bis zu fünf Planseiten analysiert.",
+    tooManyTwinSources: "Wählen Sie höchstens fünf PDF-Zeichnungen aus.",
+    autoSelectedTwinSourceLimit: "Nur die ersten fünf hochgeladenen PDFs wurden ausgewählt. Passen Sie die Auswahl unten an.",
+    selectTwinSource: "Wählen Sie mindestens eine PDF-Zeichnung aus.",
     generateTwin: "3D-Entwurf erstellen",
     saveTwin: "Geprüftes Modell speichern",
     calendar: "Kalender",
@@ -1601,6 +1610,15 @@ function addBuildingEditField(name = "", value = "") {
   document.querySelector("#building-edit-fields").append(row);
 }
 
+function populateBuildingEditForm(building) {
+  const properties = Object.entries(building.fields || {});
+  document.querySelector("#building-edit-name").value = building.object_name;
+  document.querySelector("#building-edit-fields").replaceChildren();
+  for (const [name, value] of properties) addBuildingEditField(name, value);
+  if (!properties.length) addBuildingEditField();
+  document.querySelector("#building-edit-status").textContent = "";
+}
+
 function documentIndexStatus(source, language) {
   const statusLabels = {
     pending: language.indexWaiting,
@@ -1711,6 +1729,11 @@ function createBuildingDocumentCard(source, buildingId, language) {
   return item;
 }
 
+function selectedTwinSourceIds() {
+  return [...document.querySelector("#twin-source-documents").selectedOptions]
+    .map((option) => option.value === "" ? null : Number(option.value));
+}
+
 async function uploadBuildingDocuments(input, button) {
   const files = [...input.files];
   const buildingId = state.activeBuildingId;
@@ -1731,13 +1754,23 @@ async function uploadBuildingDocuments(input, button) {
     }
     if (state.activeBuildingId === buildingId && document.querySelector("#building-detail-dialog").open) {
       await openBuildingDetails(buildingId);
-      const uploadedPdf = input === buildingDrawingInput
-        ? [...(result.documents || [])].reverse().find((file) =>
+      const uploadedPdfs = input === buildingDrawingInput
+        ? (result.documents || []).filter((file) =>
           file.mime_type === "application/pdf" || fileExtension(file.file_name) === "pdf",
         )
-        : null;
-      if (uploadedPdf && state.activeBuildingId === buildingId) {
-        document.querySelector("#twin-source-document").value = String(uploadedPdf.id);
+        : [];
+      if (uploadedPdfs.length && state.activeBuildingId === buildingId) {
+        const selectedValues = new Set(
+          uploadedPdfs.slice(0, MAX_TWIN_SOURCE_DOCUMENTS).map((file) => String(file.id)),
+        );
+        const sourceSelect = document.querySelector("#twin-source-documents");
+        for (const option of sourceSelect.options) {
+          option.selected = selectedValues.has(option.value);
+        }
+        sourceSelect.dispatchEvent(new Event("change"));
+        if (uploadedPdfs.length > MAX_TWIN_SOURCE_DOCUMENTS) {
+          document.querySelector("#twin-status").textContent = language.autoSelectedTwinSourceLimit;
+        }
       }
     }
     showToast(result.warnings?.length
@@ -1756,7 +1789,7 @@ async function openBuildingDetails(buildingId) {
   if (!building) return;
   state.activeBuildingId = buildingId;
   state.twinDraft = null;
-  state.twinDraftSourceDocumentId = null;
+  state.twinDraftSourceDocumentIds = [];
   const dialog = document.querySelector("#building-detail-dialog");
   document.querySelector("#building-detail-title").textContent = building.object_name;
   document.querySelector("#building-detail-address").textContent = building.address || "No address recorded";
@@ -1766,15 +1799,14 @@ async function openBuildingDetails(buildingId) {
   const properties = Object.entries(building.fields || {});
   const editable = state.user?.role !== "employee";
   const editForm = document.querySelector("#building-edit-form");
-  editForm.hidden = !editable;
-  propertyList.hidden = editable;
-  document.querySelector("#building-edit-name").value = building.object_name;
-  document.querySelector("#building-edit-fields").replaceChildren();
-  for (const [name, value] of properties) addBuildingEditField(name, value);
-  if (!properties.length && editable) addBuildingEditField();
+  editForm.hidden = true;
+  propertyList.hidden = false;
+  document.querySelector("#building-edit-button").hidden = !editable;
+  populateBuildingEditForm(building);
+  propertyList.replaceChildren();
   if (!properties.length) {
     propertyList.textContent = "No building details have been recorded.";
-  } else if (!editable) {
+  } else {
     propertyList.replaceChildren(...properties.map(([name, value]) => {
       const item = document.createElement("div");
       item.className = "building-property";
@@ -1839,33 +1871,48 @@ async function openBuildingDetails(buildingId) {
       source.mime_type === "application/pdf"
       || fileExtension(source.file_name) === "pdf",
     );
-    const sourceSelect = document.querySelector("#twin-source-document");
+    const sourceSelect = document.querySelector("#twin-source-documents");
     sourceSelect.replaceChildren();
-    const placeholder = document.createElement("option");
-    placeholder.value = "__placeholder__";
-    placeholder.disabled = true;
-    placeholder.textContent = pdfDocuments.length
-      ? translations[state.language].selectDrawingPdf
-      : translations[state.language].noDrawingPdf;
-    sourceSelect.append(placeholder);
     for (const source of pdfDocuments) {
       const option = document.createElement("option");
       option.value = source.id === null ? "" : String(source.id);
       option.textContent = `${source.is_primary ? "Original" : "Added"} · ${source.file_name}`;
       sourceSelect.append(option);
     }
-    const savedSourceId = twinResult.source_document_id;
-    const hasSavedSource = pdfDocuments.some((source) =>
-      (source.id === null ? null : source.id) === savedSourceId,
-    );
-    if (hasSavedSource) sourceSelect.value = savedSourceId === null ? "" : String(savedSourceId);
-    else if (pdfDocuments.length) {
-      const preferred = pdfDocuments.find((source) => !source.is_primary) || pdfDocuments[0];
-      sourceSelect.value = preferred.id === null ? "" : String(preferred.id);
+    if (!pdfDocuments.length) {
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      placeholder.textContent = translations[state.language].noDrawingPdf;
+      sourceSelect.append(placeholder);
     }
     const hasPdf = pdfDocuments.length > 0;
     sourceSelect.disabled = !hasPdf;
-    generateButton.disabled = !hasPdf;
+    const savedSourceIds = twinResult.source_document_ids?.length
+      ? twinResult.source_document_ids
+      : twinResult.source_document_id !== undefined
+        ? [twinResult.source_document_id]
+        : [];
+    const availableSourceValues = new Set(
+      pdfDocuments.map((source) => source.id === null ? "" : String(source.id)),
+    );
+    const savedSourceValues = savedSourceIds
+      .map((id) => id === null ? "" : String(id))
+      .filter((id) => availableSourceValues.has(id));
+    const addedPdfDocuments = pdfDocuments.filter((source) => !source.is_primary);
+    const defaultSourceIds = addedPdfDocuments.length
+      ? addedPdfDocuments.slice(0, MAX_TWIN_SOURCE_DOCUMENTS).map((source) => source.id)
+      : pdfDocuments.slice(0, 1).map((source) => source.id);
+    const selectedSourceValues = new Set(
+      (twinResult.twin && savedSourceValues.length ? savedSourceValues : defaultSourceIds)
+        .map((id) => id === null ? "" : String(id)),
+    );
+    for (const option of sourceSelect.options) {
+      option.selected = !option.disabled && selectedSourceValues.has(option.value);
+    }
+    const selectedIds = selectedTwinSourceIds();
+    generateButton.disabled = !selectedIds.length || selectedIds.length > MAX_TWIN_SOURCE_DOCUMENTS;
     generateButton.textContent = !hasPdf
       ? "PDF floor plan required"
       : building.has_twin ? "Create a new draft" : "Generate 3D draft";
@@ -1918,8 +1965,16 @@ async function openBuildingDetails(buildingId) {
 async function generateTwinDraft() {
   if (!state.activeBuildingId) return;
   const buildingId = state.activeBuildingId;
+  const sourceDocumentIds = selectedTwinSourceIds();
+  if (!sourceDocumentIds.length || sourceDocumentIds.length > MAX_TWIN_SOURCE_DOCUMENTS) {
+    document.querySelector("#twin-status").textContent = sourceDocumentIds.length
+      ? translations[state.language].tooManyTwinSources
+      : translations[state.language].selectTwinSource;
+    return;
+  }
   const button = document.querySelector("#generate-twin");
   button.disabled = true;
+  document.querySelector("#twin-source-documents").disabled = true;
   document.querySelector("#save-twin").hidden = true;
   document.querySelector("#twin-status").textContent = "Analyzing PDF floor-plan images…";
   try {
@@ -1929,15 +1984,14 @@ async function generateTwinDraft() {
       body: JSON.stringify({
         provider: providerSelect.value,
         model: state.modelsReady ? modelSelect.value : undefined,
-        document_id: document.querySelector("#twin-source-document").value
-          ? Number(document.querySelector("#twin-source-document").value)
-          : undefined,
+        source_document_ids: sourceDocumentIds,
       }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || "Could not generate a 3D draft.");
     if (state.activeBuildingId !== buildingId) return;
-    state.twinDraftSourceDocumentId = result.source_document_id ?? null;
+    state.twinDraftSourceDocumentIds = result.source_document_ids
+      ?? [result.source_document_id ?? null];
     if (result.warnings?.length) {
       const warning = document.querySelector("#building-detail-warning");
       warning.textContent = result.warnings.join(" ");
@@ -1947,13 +2001,17 @@ async function generateTwinDraft() {
     document.querySelector("#save-twin").hidden = false;
     document.querySelector("#save-twin").textContent = "Save reviewed model";
     document.querySelector("#twin-status").textContent =
-      `Draft uses ${result.analyzed_pages} PDF page${result.analyzed_pages === 1 ? "" : "s"}. Check it against the source before saving.`;
+      `Draft uses ${result.analyzed_pages} page${result.analyzed_pages === 1 ? "" : "s"} from ${result.analyzed_documents} PDF${result.analyzed_documents === 1 ? "" : "s"}. Check it against the source before saving.`;
   } catch (error) {
     if (state.activeBuildingId === buildingId) {
       document.querySelector("#twin-status").textContent = error.message || "Could not generate a 3D draft.";
     }
   } finally {
-    if (state.activeBuildingId === buildingId) button.disabled = false;
+    if (state.activeBuildingId === buildingId) {
+      document.querySelector("#twin-source-documents").disabled = false;
+      const selectedCount = selectedTwinSourceIds().length;
+      button.disabled = !selectedCount || selectedCount > MAX_TWIN_SOURCE_DOCUMENTS;
+    }
   }
 }
 
@@ -1970,7 +2028,7 @@ async function saveTwinDraft() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         twin: twinDraft,
-        source_document_id: state.twinDraftSourceDocumentId,
+        source_document_ids: state.twinDraftSourceDocumentIds,
       }),
     });
     const result = await response.json();
@@ -2419,14 +2477,20 @@ document.querySelector("#building-detail-close").addEventListener("click", () =>
 document.querySelector("#building-detail-dialog").addEventListener("close", () => {
   state.activeBuildingId = null;
   state.twinDraft = null;
-  state.twinDraftSourceDocumentId = null;
+  state.twinDraftSourceDocumentIds = [];
   clearTwinViewer();
 });
-document.querySelector("#twin-source-document").addEventListener("change", () => {
+document.querySelector("#twin-source-documents").addEventListener("change", () => {
+  const selectedIds = selectedTwinSourceIds();
   state.twinDraft = null;
-  state.twinDraftSourceDocumentId = null;
+  state.twinDraftSourceDocumentIds = [];
   document.querySelector("#save-twin").hidden = true;
-  document.querySelector("#twin-status").textContent = "";
+  const tooManySelected = selectedIds.length > MAX_TWIN_SOURCE_DOCUMENTS;
+  const generateButton = document.querySelector("#generate-twin");
+  generateButton.disabled = selectedIds.length === 0 || tooManySelected;
+  document.querySelector("#twin-status").textContent = tooManySelected
+    ? translations[state.language].tooManyTwinSources
+    : "";
 });
 document.querySelector("#generate-twin").addEventListener("click", generateTwinDraft);
 document.querySelector("#save-twin").addEventListener("click", saveTwinDraft);
@@ -2714,6 +2778,22 @@ document.querySelector("#sign-out").addEventListener("click", async () => {
   } catch (error) {
     showToast(error.message || "Could not sign out.");
   }
+});
+document.querySelector("#building-edit-button").addEventListener("click", () => {
+  const building = state.buildings.find((record) => record.id === state.activeBuildingId);
+  if (!building || state.user?.role === "employee") return;
+  populateBuildingEditForm(building);
+  document.querySelector("#building-property-list").hidden = true;
+  document.querySelector("#building-edit-form").hidden = false;
+  document.querySelector("#building-edit-button").hidden = true;
+  document.querySelector("#building-edit-name").focus();
+});
+document.querySelector("#building-edit-cancel").addEventListener("click", () => {
+  const building = state.buildings.find((record) => record.id === state.activeBuildingId);
+  if (building) populateBuildingEditForm(building);
+  document.querySelector("#building-edit-form").hidden = true;
+  document.querySelector("#building-property-list").hidden = false;
+  document.querySelector("#building-edit-button").hidden = state.user?.role === "employee";
 });
 document.querySelector("#building-add-property").addEventListener("click", () => addBuildingEditField());
 document.querySelector("#building-edit-form").addEventListener("submit", async (event) => {

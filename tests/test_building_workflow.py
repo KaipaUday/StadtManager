@@ -912,6 +912,7 @@ class BuildingWorkflowTests(unittest.TestCase):
             self.assertTrue(building["address_key"])
             self.assertIn("document_id", asset_columns)
             self.assertIn("source_document_id", twin_columns)
+            self.assertIn("source_document_ids_json", twin_columns)
             self.assertEqual(pending_status["status"], "pending")
             module.index_pending_documents()
             indexed_text, index_count, _ = module.search_saved_documents("legacy building Marktplatz")
@@ -1479,6 +1480,21 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(added_draft.status_code, 200, added_draft.text)
         self.assertEqual(added_draft.json()["source_document_id"], added_document["id"])
 
+        with patch.object(module, "AsyncAnthropic", return_value=fake_client):
+            combined_draft = self.client.post(
+                f"/api/buildings/{building_id}/twin/draft",
+                json={
+                    "provider": "anthropic",
+                    "source_document_ids": [None, added_document["id"]],
+                },
+            )
+        self.assertEqual(combined_draft.status_code, 200, combined_draft.text)
+        self.assertEqual(combined_draft.json()["source_document_ids"], [None, added_document["id"]])
+        self.assertEqual(combined_draft.json()["analyzed_documents"], 2)
+        self.assertEqual(combined_draft.json()["analyzed_pages"], 2)
+        combined_content = fake_client.messages.create.call_args.kwargs["messages"][0]["content"]
+        self.assertEqual(sum(block["type"] == "image" for block in combined_content), 2)
+
         os.environ["OPENAI_API_KEY"] = "test-key-not-sent"
         openai_client = SimpleNamespace(
             chat=SimpleNamespace(
@@ -1510,6 +1526,18 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(
             self.client.get(f"/api/buildings/{building_id}/twin").json()["twin"],
             twin_response,
+        )
+        saved_sources = self.client.put(
+            f"/api/buildings/{building_id}/twin",
+            json={
+                "twin": twin_response,
+                "source_document_ids": [None, added_document["id"]],
+            },
+        )
+        self.assertEqual(saved_sources.status_code, 200, saved_sources.text)
+        self.assertEqual(
+            self.client.get(f"/api/buildings/{building_id}/twin").json()["source_document_ids"],
+            [None, added_document["id"]],
         )
         self.assertTrue(self.client.get("/api/buildings").json()["buildings"][0]["has_twin"])
         agent_context = json.loads(module.agent_database_context())
