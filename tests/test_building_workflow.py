@@ -144,6 +144,140 @@ class BuildingWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(follow_up.json()["fields"], {"Roof material": "Copper"})
 
+    def test_address_validation_returns_exact_coburg_coordinates(self) -> None:
+        response_data = json.dumps([{
+            "lat": "50.2580",
+            "lon": "10.9640",
+            "display_name": "Marktplatz 1, Coburg",
+            "address": {"road": "Marktplatz", "house_number": "1"},
+        }]).encode("utf-8")
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return response_data
+
+        with patch.object(module, "urlopen", return_value=Response()):
+            response = self.client.post(
+                "/api/address/validate",
+                data={"street_name": "Marktplatz", "house_number": "1"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["latitude"], 50.258)
+        self.assertEqual(response.json()["longitude"], 10.964)
+
+    def test_existing_coburg_street_is_accepted_without_house_number_result(self) -> None:
+        response_data = json.dumps([{
+            "lat": "50.2563712",
+            "lon": "10.9557614",
+            "display_name": "Plattenäcker, Dörfles bei Scheuerfeld, Coburg, Bayern, 96450, Deutschland",
+            "address": {
+                "road": "Plattenäcker",
+                "town": "Coburg",
+                "postcode": "96450",
+            },
+        }]).encode("utf-8")
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return response_data
+
+        with patch.object(module, "urlopen", return_value=Response()):
+            response = self.client.post(
+                "/api/address/validate",
+                data={
+                    "street_name": "Plattenäcker",
+                    "house_number": "30",
+                    "full_address": "Plattenäcker 30, 96450 Coburg",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["address_match"], "street-and-coburg-area")
+        self.assertFalse(response.json()["house_number_verified"])
+
+    def test_full_address_is_used_for_geocoding(self) -> None:
+        response_data = json.dumps([{
+            "lat": "50.2581",
+            "lon": "10.9641",
+            "display_name": "Plattenäcker 30, 96450 Coburg",
+            "address": {
+                "road": "Plattenäcker",
+                "house_number": "30",
+                "city": "Coburg",
+                "postcode": "96450",
+            },
+        }]).encode("utf-8")
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return response_data
+
+        with patch.object(module, "urlopen", return_value=Response()) as urlopen_mock:
+            response = self.client.post(
+                "/api/address/validate",
+                data={
+                    "street_name": "Plattenäcker",
+                    "house_number": "30",
+                    "full_address": "Plattenäcker 30, 96450 Coburg",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        request = urlopen_mock.call_args.args[0]
+        self.assertIn("Platten", request.full_url)
+
+    def test_german_month_year_maintenance_dates_are_normalized(self) -> None:
+        findings = module.normalized_maintenance_findings([
+            {
+                "title": "Zwischenprüfung des Aufzugs",
+                "action_type": "inspect",
+                "severity": "low",
+                "due_date": "03/2028",
+                "evidence": "Zwischenprüfung: 03/2028",
+            },
+            {
+                "title": "Hauptprüfung des Aufzugs",
+                "action_type": "inspect",
+                "severity": "low",
+                "due_date": "März 2027",
+                "evidence": "Hauptprüfung: 03/2027",
+            },
+        ])
+        self.assertEqual([finding["due_date"] for finding in findings], ["2028-03-31", "2027-03-31"])
+
+    def test_clear_application_data_removes_buildings_and_related_records(self) -> None:
+        saved = self.client.post(
+            "/api/buildings",
+            data={"street_name": "Marktplatz", "house_number": "1"},
+            files={"file": ("building.txt", b"Building details", "text/plain")},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+
+        reset = self.client.delete("/api/data")
+        self.assertEqual(reset.status_code, 200, reset.text)
+        self.assertEqual(reset.json()["deleted_buildings"], 1)
+        self.assertEqual(self.client.get("/api/buildings").json()["buildings"], [])
+        self.assertEqual(self.client.get("/api/maintenance").json()["items"], [])
+
     def test_address_is_required_and_building_name_is_optional(self) -> None:
         response = self.client.post(
             "/api/buildings",

@@ -16,7 +16,8 @@ from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 
 import anthropic
 from anthropic import AsyncAnthropic
@@ -89,14 +90,21 @@ def normalized_address_key(street_name: str, house_number: str) -> str:
 
 
 def parse_street_address(address: str) -> tuple[str, str] | None:
-    street_address = address.split(",", 1)[0].strip()
-    match = re.fullmatch(
-        r"(.+?)\s+(\d{1,5}[A-Za-z]?(?:\s*[/\-]\s*\d{1,5}[A-Za-z]?)?)",
-        street_address,
-    )
-    if not match:
-        return None
-    return match.group(1).strip(), re.sub(r"\s*([/-])\s*", r"\1", match.group(2).strip())
+    street_address = address.strip()
+    for prefix in ("Aufstellungsort:", "Adresse:", "Address:", "Straße:", "Strasse:"):
+        if street_address.lower().startswith(prefix.lower()):
+            street_address = street_address[len(prefix):].strip()
+    address_lines = re.split(r"[\r\n]+", street_address)
+    candidates = [street_address.split(",", 1)[0].strip(), *address_lines]
+    for candidate in candidates:
+        candidate = re.sub(r"\b\d{5}\b.*$", "", candidate).strip()
+        match = re.fullmatch(
+            r"(.+?)\s+(\d{1,5}[A-Za-z]?(?:\s*[/\-]\s*\d{1,5}[A-Za-z]?)?)",
+            candidate,
+        )
+        if match:
+            return match.group(1).strip(), re.sub(r"\s*([/-])\s*", r"\1", match.group(2).strip())
+    return None
 
 
 def validated_address(street_name: str, house_number: str) -> tuple[str, str, str]:
@@ -1150,6 +1158,130 @@ def valid_coordinate(value: object, lower: float, upper: float) -> float | None:
     return coordinate if lower <= coordinate <= upper else None
 
 
+def geocode_coburg_address(street_name: str, house_number: str, full_address: str = "") -> dict[str, object]:
+    street_name, house_number, _ = validated_address(street_name, house_number)
+    query_params = {
+        "format": "jsonv2",
+        "countrycodes": "de",
+        "limit": "5",
+        "addressdetails": "1",
+        "accept-language": "de",
+    }
+    if full_address.strip():
+        query_params["q"] = f"{full_address.strip()}, Germany"
+    else:
+        query_params.update({
+            "street": f"{house_number} {street_name}",
+            "city": "Coburg",
+            "state": "Bayern",
+            "country": "Germany",
+        })
+    params = urlencode(query_params)
+    request = Request(
+        f"https://nominatim.openstreetmap.org/search?{params}",
+        headers={
+            "User-Agent": "StadtManager/1.0 (local city building records)",
+            "Accept-Language": "de",
+        },
+    )
+    try:
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail="The address could not be verified because the map-address service is unavailable.",
+        ) from error
+
+    if not isinstance(payload, list):
+        payload = []
+    candidates: list[dict[str, object]] = []
+    road_candidates: list[dict[str, object]] = []
+    for result in payload:
+        if not isinstance(result, dict):
+            continue
+        address = result.get("address")
+        if not isinstance(address, dict):
+            continue
+        result_street = str(address.get("road") or address.get("pedestrian") or address.get("path") or "")
+        result_number = str(address.get("house_number") or "")
+        city = str(address.get("city") or address.get("town") or address.get("municipality") or "")
+        postcode = str(address.get("postcode") or "")
+        exact_address = normalized_address_key(result_street, result_number)
+        requested_address = normalized_address_key(street_name, house_number)
+        normalized_result_street = normalized_address_key(result_street, "1").split("|", 1)[0]
+        normalized_requested_street = requested_address.split("|", 1)[0]
+        display_name = str(result.get("display_name") or "")
+        is_coburg = (
+            city.casefold().startswith("coburg")
+            or "coburg" in display_name.casefold()
+            or postcode.startswith("96450")
+        )
+        if (
+            normalized_result_street == normalized_requested_street
+            and is_coburg
+            and not result_number
+        ):
+            road_candidates.append(result)
+        if exact_address == requested_address and (
+            not city
+            or city.casefold().startswith("coburg")
+            or "coburg" in str(result.get("display_name") or "").casefold()
+        ):
+            candidates.append(result)
+        elif full_address.strip() and result_number and city.casefold().startswith("coburg") and (
+            postcode.startswith("96450") or "coburg" in str(result.get("display_name") or "").casefold()
+        ):
+            normalized_result_street = normalized_address_key(result_street, result_number).split("|", 1)[0]
+            normalized_requested_street = requested_address.split("|", 1)[0]
+            if (
+                normalized_result_street == normalized_requested_street
+                and re.sub(r"\D", "", result_number) == re.sub(r"\D", "", house_number)
+            ):
+                candidates.append(result)
+
+    if not candidates and road_candidates:
+        candidates = road_candidates
+        road_only_match = True
+    else:
+        road_only_match = False
+
+    if not candidates:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "address-not-found",
+                "message": f"No exact Coburg address was found for {street_name} {house_number}.",
+            },
+        )
+
+    result = candidates[0]
+    try:
+        latitude = float(result["lat"])
+        longitude = float(result["lon"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HTTPException(status_code=502, detail="The verified address did not contain valid coordinates.") from error
+    if not (49.99 <= latitude <= 50.55 and 10.65 <= longitude <= 11.25):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "address-outside-coburg",
+                "message": "The verified address is outside the Coburg map area.",
+            },
+        )
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "display_name": (
+            f"{street_name} {house_number}, 96450 Coburg"
+            if road_only_match
+            else str(result.get("display_name") or f"{street_name} {house_number}, Coburg")
+        ),
+        "address_match": "street-and-coburg-area" if road_only_match else "exact-address",
+        "house_number_verified": not road_only_match,
+    }
+
+
 def normalized_maintenance_findings(value: object) -> list[dict[str, str | None]]:
     if not isinstance(value, list):
         if value is not None:
@@ -1180,8 +1312,30 @@ def normalized_maintenance_findings(value: object) -> list[dict[str, str | None]
             try:
                 due_date = date.fromisoformat(raw_due_date).isoformat()
             except ValueError:
-                logger.warning("Ignoring invalid due date in an AI maintenance finding.")
-                due_date = None
+                month_year = re.search(r"(?:^|[/\s])(?:0?([1-9]|1[0-2]))[/.-](20\d{2})(?:$|[^0-9])", raw_due_date)
+                german_month_year = re.search(
+                    r"(0?[1-9]|1[0-2]|Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)[^\d]*(20\d{2})",
+                    raw_due_date,
+                    re.IGNORECASE,
+                )
+                month = None
+                year = None
+                if month_year:
+                    month, year = int(month_year.group(1)), int(month_year.group(2))
+                elif german_month_year:
+                    month_text = german_month_year.group(1).casefold()
+                    year = int(german_month_year.group(2))
+                    german_months = {
+                        "januar": 1, "februar": 2, "märz": 3, "maerz": 3, "april": 4,
+                        "mai": 5, "juni": 6, "juli": 7, "august": 8, "september": 9,
+                        "oktober": 10, "november": 11, "dezember": 12,
+                    }
+                    month = int(month_text) if month_text.isdigit() else german_months.get(month_text)
+                if month and year:
+                    import calendar
+                    due_date = date(year, month, calendar.monthrange(year, month)[1]).isoformat()
+                else:
+                    logger.warning("Ignoring invalid due date in an AI maintenance finding.")
         findings.append({
             "title": title,
             "action_type": action_type,
@@ -1219,6 +1373,10 @@ async def extract_building_fields(
         "List maintenance findings only when the document explicitly states a defect, required repair, "
         "replacement, inspection, or scheduled maintenance. Do not infer work from age, standards, or "
         "absence of information. Every finding must include a concise evidence excerpt from the document. "
+        "Preserve the source language for titles and evidence. For German documents, return German titles "
+        "and German evidence excerpts; do not translate them. Convert explicit month/year deadlines or "
+        "scheduled inspections such as '03/2027' or 'März 2027' to due_date as the last day of that month "
+        "in YYYY-MM-DD format. If no deadline is stated, use null. "
         "Use null for an unspecified due date. Existing categories: "
         f"{json.dumps(categories, ensure_ascii=False)}.\n\nDocument text:\n{text[:MAX_CONTEXT_CHARS]}"
     )
@@ -1314,6 +1472,15 @@ async def get_categories() -> dict[str, list[str]]:
     return {"categories": list_category_names()}
 
 
+@app.post("/api/address/validate")
+async def validate_address(
+    street_name: str = Form(""),
+    house_number: str = Form(""),
+    full_address: str = Form(""),
+) -> dict[str, object]:
+    return geocode_coburg_address(street_name, house_number, full_address)
+
+
 @app.post("/api/extract")
 async def extract_document(
     file: UploadFile = File(...),
@@ -1387,6 +1554,7 @@ async def save_building(
     address: str = Form(""),
     latitude: str = Form(""),
     longitude: str = Form(""),
+    address_verified: str = Form("false"),
     fields_json: str = Form("{}"),
     maintenance_json: str = Form("[]"),
     merge_target_uid: str = Form(""),
@@ -1450,6 +1618,10 @@ async def save_building(
     lon = valid_coordinate(longitude, -180, 180) if longitude.strip() else None
     if bool(latitude.strip()) != bool(longitude.strip()) or (latitude.strip() and (lat is None or lon is None)):
         raise HTTPException(status_code=422, detail="Enter both valid latitude and longitude, or leave both empty.")
+    if address_verified.strip().casefold() in {"1", "true", "yes"}:
+        verified = geocode_coburg_address(street_name, house_number, address)
+        lat = float(verified["latitude"])
+        lon = float(verified["longitude"])
 
     filename = Path(file.filename or "upload").name
     extension = Path(filename).suffix.lower()
@@ -1740,6 +1912,39 @@ async def get_buildings() -> dict[str, list[dict[str, object]]]:
             for building in buildings
         ]
     }
+
+
+@app.delete("/api/data")
+async def clear_application_data() -> dict[str, object]:
+    with database() as connection:
+        building_count = connection.execute("SELECT COUNT(*) FROM buildings").fetchone()[0]
+        connection.execute("DROP TRIGGER IF EXISTS document_text_ai")
+        connection.execute("DROP TRIGGER IF EXISTS document_text_ad")
+        connection.execute("DROP TRIGGER IF EXISTS document_text_au")
+        connection.execute("DROP TABLE IF EXISTS document_text_fts")
+        connection.execute("DELETE FROM document_text")
+        connection.execute("DELETE FROM buildings")
+        connection.execute("DELETE FROM document_index_state")
+        connection.execute("DELETE FROM categories")
+        connection.execute("INSERT OR IGNORE INTO categories (name) VALUES ('Heating system')")
+        connection.execute("CREATE VIRTUAL TABLE document_text_fts USING fts5(content)")
+        connection.executescript(
+            """
+            CREATE TRIGGER document_text_ai AFTER INSERT ON document_text BEGIN
+                INSERT INTO document_text_fts (rowid, content) VALUES (new.id, new.content);
+            END;
+            CREATE TRIGGER document_text_ad AFTER DELETE ON document_text BEGIN
+                INSERT INTO document_text_fts (document_text_fts, rowid, content)
+                VALUES ('delete', old.id, old.content);
+            END;
+            CREATE TRIGGER document_text_au AFTER UPDATE ON document_text BEGIN
+                INSERT INTO document_text_fts (document_text_fts, rowid, content)
+                VALUES ('delete', old.id, old.content);
+                INSERT INTO document_text_fts (rowid, content) VALUES (new.id, new.content);
+            END;
+            """
+        )
+    return {"deleted_buildings": building_count}
 
 
 @app.get("/api/buildings/{building_id}/documents")

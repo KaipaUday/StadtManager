@@ -41,6 +41,24 @@ rooms, positions, dimensions, units, and confidence. If the PDF has no usable
 scale, dimensions are relative rather than meters. This is a simplified visual
 model, not an IFC/BIM model or an engineering-accurate representation.
 
+The top bar has a German/English language toggle. It defaults to German when
+the browser language starts with `de`, otherwise English, and remembers the
+chosen language locally. **Clear data** asks for confirmation before deleting
+all saved buildings, source files, maintenance findings, document indexes, and
+saved 3D models.
+
+Before saving an uploaded file, verify its street name and house number with
+**Verify address**. Verification uses the public OpenStreetMap address service
+to find an exact Coburg address and fill the map latitude and longitude. If no
+exact address is found, or the verified result is outside the Coburg area, the
+file will not be saved. Coordinates can also be selected directly on the map,
+but the street and house number are still checked before acceptance. Verified
+addresses become the pin position for the building and are linked to its saved
+files and 3D data. An optional full-address field can be entered or extracted
+from a document for address searches; street name and house number remain the
+required stable identity fields.
+files and 3D data.
+
 To use the AI assistant, set either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
 in the server's environment. Select the matching provider in the website.
 Optional `ANTHROPIC_MODEL` and `OPENAI_MODEL` variables override the default

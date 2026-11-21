@@ -37,8 +37,109 @@ const state = {
   twinDraftSourceDocumentId: null,
   threePromise: null,
   twinViewer: null,
+  addressVerified: false,
+  language: "en",
 };
 sendButton.disabled = true;
+
+const translations = {
+  en: {
+    workspace: "Workspace",
+    overview: "Overview",
+    files: "File workspace",
+    map: "City map",
+    assistant: "AI assistant",
+    checking: "Checking backend",
+    clear: "Clear data",
+    welcome: "Good work starts",
+    welcomeAccent: "with clear data.",
+    welcomeCopy: "Bring your files together, make sense of the numbers, and move from questions to decisions.",
+    saved: "SAVED BUILDINGS",
+    savedFoot: "Accepted records in database",
+    maintenance: "Maintenance & alerts",
+    maintenanceCopy: "AI findings stay suggestions until you confirm them. Track upcoming repairs here.",
+    fileWorkspace: "File workspace",
+    fileCopy: "Drop in a file to preview and prepare it for analysis.",
+    drop: "Drop your files here",
+    browseFiles: "Browse files",
+    browseFolder: "Choose folder",
+    aiPartner: "YOUR AI PARTNER",
+    ask: "Ask StadtManager",
+    mapTitle: "Coburg in 3D",
+    mapCopy: "Click a pin to open its PDF images and 3D model. Search saved buildings by name, address, or property.",
+  },
+  de: {
+    workspace: "Arbeitsbereich",
+    overview: "Übersicht",
+    files: "Datei-Arbeitsbereich",
+    map: "Stadtkarte",
+    assistant: "KI-Assistent",
+    checking: "Backend wird geprüft",
+    clear: "Daten löschen",
+    welcome: "Gute Arbeit beginnt",
+    welcomeAccent: "mit klaren Daten.",
+    welcomeCopy: "Fügen Sie Ihre Dateien zusammen, verstehen Sie die Zahlen und treffen Sie fundierte Entscheidungen.",
+    saved: "GESPEICHERTE GEBÄUDE",
+    savedFoot: "Bestätigte Datensätze in der Datenbank",
+    maintenance: "Wartung & Meldungen",
+    maintenanceCopy: "KI-Ergebnisse bleiben Vorschläge, bis Sie diese bestätigen. Verfolgen Sie bevorstehende Reparaturen.",
+    fileWorkspace: "Datei-Arbeitsbereich",
+    fileCopy: "Legen Sie eine Datei ab, um sie anzusehen und für die Analyse vorzubereiten.",
+    drop: "Legen Sie Ihre Dateien hier ab",
+    browseFiles: "Dateien auswählen",
+    browseFolder: "Ordner auswählen",
+    aiPartner: "IHR KI-PARTNER",
+    ask: "StadtManager fragen",
+    mapTitle: "Coburg in 3D",
+    mapCopy: "Klicken Sie auf eine Stecknadel, um PDF-Bilder und 3D-Modell zu öffnen. Suchen Sie Gebäude nach Name, Adresse oder Eigenschaft.",
+  },
+};
+
+function applyLanguage(language) {
+  state.language = language;
+  document.documentElement.lang = language;
+  localStorage.setItem("stadtmanager-language", language);
+  document.querySelector("#language-en").classList.toggle("active", language === "en");
+  document.querySelector("#language-de").classList.toggle("active", language === "de");
+  const t = translations[language];
+  const text = {
+    "[data-i18n=\"workspace\"]": t.workspace,
+    "[data-i18n=\"overview\"]": t.overview,
+    "[data-i18n=\"files\"]": t.files,
+    "[data-i18n=\"map\"]": t.map,
+    "[data-i18n=\"assistant\"]": t.assistant,
+    "[data-i18n=\"checking\"]": t.checking,
+    "[data-i18n=\"clear\"]": t.clear,
+    "[data-i18n=\"welcome\"]": t.welcome,
+    "[data-i18n=\"welcomeAccent\"]": t.welcomeAccent,
+    "[data-i18n=\"welcomeCopy\"]": t.welcomeCopy,
+    "[data-i18n=\"saved\"]": t.saved,
+    "[data-i18n=\"savedFoot\"]": t.savedFoot,
+    "[data-i18n=\"maintenance\"]": t.maintenance,
+    "[data-i18n=\"maintenanceCopy\"]": t.maintenanceCopy,
+    "[data-i18n=\"fileWorkspace\"]": t.fileWorkspace,
+    "[data-i18n=\"fileCopy\"]": t.fileCopy,
+    "[data-i18n=\"drop\"]": t.drop,
+    "[data-i18n=\"browseFiles\"]": t.browseFiles,
+    "[data-i18n=\"browseFolder\"]": t.browseFolder,
+    "[data-i18n=\"aiPartner\"]": t.aiPartner,
+    "[data-i18n=\"ask\"]": t.ask,
+    "[data-i18n=\"mapTitle\"]": t.mapTitle,
+    "[data-i18n=\"mapCopy\"]": t.mapCopy,
+  };
+  for (const [selector, value] of Object.entries(text)) {
+    for (const element of document.querySelectorAll(selector)) element.textContent = value;
+  }
+  document.querySelector("#language-toggle").setAttribute(
+    "aria-label",
+    language === "en" ? "Zur deutschen Oberfläche wechseln" : "Switch to English interface",
+  );
+  const now = new Date();
+  document.querySelector("#current-date").textContent = new Intl.DateTimeFormat(
+    language === "de" ? "de-DE" : "en-GB",
+    { weekday: "short", month: "short", day: "numeric", year: "numeric" },
+  ).format(now);
+}
 
 function showToast(message) {
   toast.textContent = message;
@@ -199,9 +300,11 @@ function setReviewEditingEnabled(enabled) {
 
 function showExtraction(result) {
   state.currentExtraction = result;
+  state.addressVerified = false;
   document.querySelector("#object-name").value = result.object_name || "";
   document.querySelector("#street-name").value = result.street_name || "";
   document.querySelector("#house-number").value = result.house_number || "";
+  document.querySelector("#full-address").value = result.address || "";
   document.querySelector("#building-latitude").value = result.latitude ?? "";
   document.querySelector("#building-longitude").value = result.longitude ?? "";
   document.querySelector("#preview-kind").textContent = result.kind || "";
@@ -343,6 +446,7 @@ async function processNextImport() {
   document.querySelector("#object-name").value = "";
   document.querySelector("#street-name").value = "";
   document.querySelector("#house-number").value = "";
+  document.querySelector("#full-address").value = "";
   document.querySelector("#building-latitude").value = "";
   document.querySelector("#building-longitude").value = "";
   document.querySelector("#extraction-maintenance").hidden = true;
@@ -351,6 +455,7 @@ async function processNextImport() {
   state.pendingMerge = null;
   document.querySelector("#extraction-notice").hidden = true;
   document.querySelector("#review-fields").replaceChildren(createFieldRow());
+  state.addressVerified = false;
   displayPreview(file);
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
 
@@ -388,6 +493,33 @@ function finishCurrentImport() {
   processNextImport();
 }
 
+async function validateAddress() {
+  const streetName = document.querySelector("#street-name").value.trim();
+  const houseNumber = document.querySelector("#house-number").value.trim();
+  const fullAddress = document.querySelector("#full-address").value.trim();
+  if (!streetName || !houseNumber) {
+    throw new Error("Enter a street name and house number before saving.");
+  }
+  document.querySelector("#review-status").textContent = "Verifying this exact Coburg address…";
+  const formData = new FormData();
+  formData.append("street_name", streetName);
+  formData.append("house_number", houseNumber);
+  formData.append("full_address", fullAddress);
+  const response = await fetch("/api/address/validate", { method: "POST", body: formData });
+  const result = await response.json();
+  if (!response.ok) {
+    const detail = result.detail;
+    const message = typeof detail === "object" ? detail.message : detail;
+    throw new Error(message || "This address could not be verified.");
+  }
+  document.querySelector("#building-latitude").value = Number(result.latitude).toFixed(6);
+  document.querySelector("#building-longitude").value = Number(result.longitude).toFixed(6);
+  state.addressVerified = true;
+  document.querySelector("#review-status").textContent =
+    `Verified address: ${result.display_name}.`;
+  return result;
+}
+
 async function acceptBuilding() {
   const file = state.currentImport;
   if (!file) return;
@@ -403,6 +535,14 @@ async function acceptBuilding() {
     document.querySelector("#house-number").focus();
     document.querySelector("#review-status").textContent = "House number is required.";
     return;
+  }
+  if (!state.addressVerified) {
+    try {
+      await validateAddress();
+    } catch (error) {
+      document.querySelector("#review-status").textContent = error.message || "Address verification failed.";
+      return;
+    }
   }
 
   if (state.pendingMerge?.candidates.length && !state.pendingMerge.targetUid) {
@@ -436,8 +576,10 @@ async function acceptBuilding() {
   formData.append("object_name", objectName);
   formData.append("street_name", streetName);
   formData.append("house_number", houseNumber);
+  formData.append("address", document.querySelector("#full-address").value.trim());
   formData.append("latitude", document.querySelector("#building-latitude").value.trim());
   formData.append("longitude", document.querySelector("#building-longitude").value.trim());
+  formData.append("address_verified", state.addressVerified ? "true" : "false");
   formData.append("fields_json", JSON.stringify(fields));
   formData.append("maintenance_json", JSON.stringify(state.currentExtraction?.maintenance_findings || []));
   formData.append("merge_target_uid", state.pendingMerge?.targetUid || "");
@@ -1167,6 +1309,7 @@ function initializeCityMap() {
     if (!state.pickingLocation) return;
     document.querySelector("#building-latitude").value = event.lngLat.lat.toFixed(6);
     document.querySelector("#building-longitude").value = event.lngLat.lng.toFixed(6);
+    state.addressVerified = false;
     document.querySelector("#review-status").textContent = "Map location selected.";
     state.pickingLocation = false;
     state.map.getCanvas().style.cursor = "";
@@ -1331,6 +1474,25 @@ document.querySelector("#twin-room-list").addEventListener("change", (event) => 
   document.querySelector("#twin-status").textContent = "Draft edited. Review the updated 3D model before saving.";
   renderTwin(state.twinDraft, state.activeBuildingId);
 });
+document.querySelector("#validate-address").addEventListener("click", async () => {
+  try {
+    await validateAddress();
+  } catch (error) {
+    state.addressVerified = false;
+    document.querySelector("#review-status").textContent = error.message || "Address verification failed.";
+  }
+});
+for (const id of ["street-name", "house-number", "full-address"]) {
+  document.querySelector(`#${id}`).addEventListener("input", () => {
+    state.addressVerified = false;
+  });
+}
+document.querySelector("#building-latitude").addEventListener("input", () => {
+  state.addressVerified = false;
+});
+document.querySelector("#building-longitude").addEventListener("input", () => {
+  state.addressVerified = false;
+});
 document.querySelector("#add-field").addEventListener("click", () => {
   const row = createFieldRow();
   document.querySelector("#review-fields").append(row);
@@ -1375,10 +1537,36 @@ document.querySelector("#theme-toggle").addEventListener("click", () => {
 });
 if (localStorage.getItem("stadtmanager-theme") === "dark") document.body.classList.add("dark");
 
-const now = new Date();
-document.querySelector("#current-date").textContent = new Intl.DateTimeFormat(undefined, {
-  weekday: "short", month: "short", day: "numeric", year: "numeric",
-}).format(now);
+document.querySelector("#language-toggle").addEventListener("click", () => {
+  applyLanguage(state.language === "en" ? "de" : "en");
+});
+document.querySelector("#clear-data").addEventListener("click", async () => {
+  const message = state.language === "de"
+    ? "Alle gespeicherten Gebäude, Dateien, Wartungsmeldungen und 3D-Modelle unwiderruflich löschen?"
+    : "Permanently delete all saved buildings, files, maintenance alerts, and 3D models?";
+  if (!window.confirm(message)) return;
+  try {
+    const response = await fetch("/api/data", { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "Could not clear saved data.");
+    state.files = [];
+    state.processedCount = 0;
+    state.buildings = [];
+    state.maintenance = [];
+    renderFiles();
+    renderBuildings();
+    renderMaintenanceOverview();
+    showToast(state.language === "de"
+      ? `${result.deleted_buildings} Gebäude und alle zugehörigen Daten gelöscht.`
+      : `${result.deleted_buildings} buildings and all related data deleted.`);
+  } catch (error) {
+    showToast(error.message || "Could not clear saved data.");
+  }
+});
+
+const savedLanguage = localStorage.getItem("stadtmanager-language");
+const browserLanguage = (navigator.language || "en").toLowerCase().startsWith("de") ? "de" : "en";
+applyLanguage(savedLanguage === "de" || savedLanguage === "en" ? savedLanguage : browserLanguage);
 
 fetch("/api/health")
   .then((response) => {
