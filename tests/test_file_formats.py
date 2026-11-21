@@ -54,8 +54,11 @@ class SupportedTypesTests(unittest.TestCase):
 
         page = (public / "index.html").read_text(encoding="utf-8")
         accept_lists = re.findall(r'accept="([^"]+)"', page)
-        self.assertEqual(len(accept_lists), 2)
-        for accept in accept_lists:
+        drawing_accept = ".pdf,application/pdf"
+        self.assertIn(drawing_accept, accept_lists)
+        attachment_accepts = [accept for accept in accept_lists if accept != drawing_accept]
+        self.assertEqual(len(attachment_accepts), 2)
+        for accept in attachment_accepts:
             self.assertEqual(set(accept.split(",")), set(ff.SUPPORTED_EXTENSIONS))
 
     def test_unsupported_extension_is_rejected(self) -> None:

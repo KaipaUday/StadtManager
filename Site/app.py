@@ -64,6 +64,7 @@ MAX_TWIN_TOTAL_IMAGE_BYTES = 12 * 1024 * 1024
 MIN_EMBEDDED_IMAGE_PIXELS = 40_000
 MIN_EMBEDDED_IMAGE_PAGE_AREA = 0.01
 MAX_EMBEDDED_IMAGE_PAGE_AREA = 0.8
+MAX_DOCUMENT_DISPLAY_CHARS = 200_000
 ALLOWED_EXTENSIONS = set(file_formats.SUPPORTED_EXTENSIONS)
 IMAGE_EXTENSIONS = set(file_formats.IMAGE_EXTENSIONS)
 RENDERABLE_MIME_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/gif", "image/tiff"}
@@ -3055,6 +3056,181 @@ async def get_building_documents(building_id: int) -> dict[str, list[dict[str, o
                 for document in documents
             ],
         ]
+    }
+
+
+@app.post("/api/buildings/{building_id}/documents", status_code=201)
+async def add_building_documents(
+    building_id: int,
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+) -> dict[str, object]:
+    if not files:
+        raise HTTPException(status_code=422, detail="Choose at least one attachment.")
+    with database() as connection:
+        building = connection.execute("SELECT id FROM buildings WHERE id = ?", (building_id,)).fetchone()
+    if building is None:
+        raise HTTPException(status_code=404, detail="Building not found.")
+
+    prepared: list[dict[str, object]] = []
+    total_bytes = 0
+    warnings: list[str] = []
+    for upload in files:
+        filename = Path(upload.filename or "attachment").name
+        extension = Path(filename).suffix.lower()
+        if extension not in ALLOWED_EXTENSIONS:
+            await upload.close()
+            raise HTTPException(
+                status_code=415,
+                detail=f"Unsupported file type. Supported types: {file_formats.supported_extensions_text()}.",
+            )
+        raw = await upload.read(MAX_UPLOAD_BYTES + 1)
+        await upload.close()
+        if len(raw) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f"File exceeds the {MAX_UPLOAD_MB} MB server limit.")
+        total_bytes += len(raw)
+        if total_bytes > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Combined attachments exceed the {MAX_UPLOAD_MB} MB request limit.",
+            )
+
+        mime_type = file_formats.mime_type_for(filename)
+        assets: list[dict[str, object]] = []
+        asset_version = 1
+        if mime_type in RENDERABLE_MIME_TYPES:
+            try:
+                assets, asset_warnings = render_pdf_assets(
+                    renderable_pdf(raw, mime_type, filename),
+                    include_embedded_images=mime_type == "application/pdf",
+                )
+                warnings.extend(asset_warnings)
+            except (RuntimeError, ValueError) as error:
+                logger.warning("Could not render attachment %s for building %s: %s", filename, building_id, error)
+                warnings.append(f"{filename} was attached, but image previews could not be generated.")
+                asset_version = 0
+        prepared.append({
+            "file_name": filename,
+            "mime_type": mime_type,
+            "file_data": raw,
+            "assets": assets,
+            "asset_version": asset_version,
+        })
+
+    added_documents: list[dict[str, object]] = []
+    source_keys: list[str] = []
+    with database() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        for item in prepared:
+            cursor = connection.execute(
+                """INSERT INTO building_documents (uid, building_id, file_name, mime_type, file_data)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    str(uuid.uuid4()),
+                    building_id,
+                    item["file_name"],
+                    item["mime_type"],
+                    sqlite3.Binary(item["file_data"]),
+                ),
+            )
+            document_id = int(cursor.lastrowid)
+            source_key = f"document:{document_id}"
+            source_keys.append(source_key)
+            connection.execute(
+                """INSERT INTO document_index_state
+                   (source_key, building_id, document_id, source_file_name, asset_version, status)
+                   VALUES (?, ?, ?, ?, ?, 'pending')""",
+                (
+                    source_key,
+                    building_id,
+                    document_id,
+                    item["file_name"],
+                    item["asset_version"],
+                ),
+            )
+            for asset in item["assets"]:
+                connection.execute(
+                    """INSERT INTO building_assets
+                       (building_id, document_id, asset_type, page_number, file_name, mime_type, file_data)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        building_id,
+                        document_id,
+                        asset["asset_type"],
+                        asset["page_number"],
+                        f"doc-{document_id}-{asset['file_name']}",
+                        asset["mime_type"],
+                        sqlite3.Binary(asset["file_data"]),
+                    ),
+                )
+            added_documents.append({
+                "id": document_id,
+                "file_name": item["file_name"],
+                "mime_type": item["mime_type"],
+                "index_status": "pending",
+            })
+
+    for source_key in source_keys:
+        background_tasks.add_task(index_document, source_key)
+    return {"documents": added_documents, "warnings": list(dict.fromkeys(warnings))}
+
+
+@app.get("/api/buildings/{building_id}/document-text")
+async def get_building_document_text(
+    building_id: int,
+    document_id: int | None = None,
+) -> dict[str, object]:
+    source_key = f"document:{document_id}" if document_id is not None else f"building:{building_id}"
+    with database() as connection:
+        state = connection.execute(
+            """SELECT source_file_name, status, indexed_pages, error_message
+               FROM document_index_state WHERE source_key = ? AND building_id = ? AND document_id IS ?""",
+            (source_key, building_id, document_id),
+        ).fetchone()
+        if state is None:
+            raise HTTPException(status_code=404, detail="Document text is not available for this building.")
+        total_chunks = connection.execute(
+            "SELECT COUNT(*) FROM document_text WHERE source_key = ?",
+            (source_key,),
+        ).fetchone()[0]
+        chunks = connection.execute(
+            """SELECT page_number, content FROM document_text
+               WHERE source_key = ? ORDER BY page_number, chunk_index LIMIT ?""",
+            (source_key, MAX_DOCUMENT_DISPLAY_CHARS // 6_000 + 1),
+        ).fetchall()
+        ai_record = connection.execute(
+            """SELECT provider, model, payload_json, created_at FROM ai_generated_records
+               WHERE building_id = ? AND source_file_name = ? AND record_type = 'extraction'
+               ORDER BY id DESC LIMIT 1""",
+            (building_id, state["source_file_name"]),
+        ).fetchone()
+
+    text_parts: list[str] = []
+    chars_remaining = MAX_DOCUMENT_DISPLAY_CHARS
+    for chunk in chunks:
+        part = f"[Page {chunk['page_number']}]\n{chunk['content']}"
+        if len(part) > chars_remaining:
+            text_parts.append(part[:chars_remaining])
+            chars_remaining = 0
+            break
+        text_parts.append(part)
+        chars_remaining -= len(part) + 2
+        if chars_remaining <= 0:
+            break
+
+    return {
+        "file_name": state["source_file_name"],
+        "index_status": state["status"],
+        "indexed_pages": state["indexed_pages"],
+        "index_error": state["error_message"],
+        "parsed_text": "\n\n".join(text_parts),
+        "parsed_text_truncated": total_chunks > len(chunks) or chars_remaining <= 0,
+        "ai_extraction": {
+            "provider": ai_record["provider"],
+            "model": ai_record["model"],
+            "created_at": ai_record["created_at"],
+            "data": json.loads(ai_record["payload_json"]),
+        } if ai_record else None,
     }
 
 

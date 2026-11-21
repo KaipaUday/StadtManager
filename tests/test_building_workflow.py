@@ -18,6 +18,8 @@ os.environ["STADTMANAGER_DB_PATH"] = str(Path(_bootstrap_database.name) / "boots
 from Site import app as module
 from fastapi.testclient import TestClient
 
+from sample_files import minimal_xlsx
+
 
 class BuildingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -712,6 +714,64 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertIn("generator-inspection.txt", system_prompt)
         self.assertIn("before the end of 2028", system_prompt)
         self.assertIn("page", system_prompt)
+
+    def test_building_attachments_index_excel_and_expose_saved_content(self) -> None:
+        saved = self.client.post(
+            "/api/buildings",
+            data={"street_name": "Marktplatz", "house_number": "5"},
+            files={"file": ("inspection.txt", b"Original inspection text", "text/plain")},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        building_id = saved.json()["id"]
+
+        with module.database() as connection:
+            connection.execute(
+                """INSERT INTO ai_generated_records
+                   (uid, record_type, provider, model, source_file_name, building_id, payload_json, search_text)
+                   VALUES (?, 'extraction', 'anthropic', 'test-model', ?, ?, ?, ?)""",
+                (
+                    "test-extraction-record",
+                    "inspection.txt",
+                    building_id,
+                    json.dumps({"fields": {"Heating": "District heating"}}),
+                    "Heating District heating",
+                ),
+            )
+
+        pdf = pymupdf.open()
+        page = pdf.new_page()
+        page.insert_text((72, 72), "Ground floor plan")
+        pdf_bytes = pdf.tobytes()
+        pdf.close()
+        added = self.client.post(
+            f"/api/buildings/{building_id}/documents",
+            files=[
+                ("files", ("building-register.xlsx", minimal_xlsx([["Street", "No"], ["Ketschengasse", "7"]]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                ("files", ("ground-floor.pdf", pdf_bytes, "application/pdf")),
+            ],
+        )
+        self.assertEqual(added.status_code, 201, added.text)
+        self.assertEqual(len(added.json()["documents"]), 2)
+
+        documents = self.client.get(f"/api/buildings/{building_id}/documents").json()["documents"]
+        spreadsheet = next(document for document in documents if document["file_name"] == "building-register.xlsx")
+        self.assertEqual(spreadsheet["index_status"], "ready")
+        spreadsheet_text = self.client.get(
+            f"/api/buildings/{building_id}/document-text?document_id={spreadsheet['id']}"
+        ).json()
+        self.assertIn("Sheet: Gebäude", spreadsheet_text["parsed_text"])
+        self.assertIn("Ketschengasse\t7", spreadsheet_text["parsed_text"])
+
+        original_text = self.client.get(f"/api/buildings/{building_id}/document-text").json()
+        self.assertIn("Original inspection text", original_text["parsed_text"])
+        self.assertEqual(
+            original_text["ai_extraction"]["data"]["fields"]["Heating"],
+            "District heating",
+        )
+        self.assertTrue(any(
+            document["file_name"] == "ground-floor.pdf" and document["mime_type"] == "application/pdf"
+            for document in documents
+        ))
 
     def test_upload_limit_exceeds_previous_five_megabyte_cap(self) -> None:
         self.assertGreater(module.MAX_UPLOAD_BYTES, 5 * 1024 * 1024)
