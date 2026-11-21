@@ -19,13 +19,14 @@ add categories such as heating system, and accept each record before it is saved
 ## Supported file types
 
 Every listed type can be uploaded and is stored unchanged in SQLite. Where the
-format contains text, the text is extracted for the preview, the AI field
-extraction, and the local full-text search. No extra Python packages are needed
+format contains text, it is extracted for the preview and local full-text
+search. AI field extraction uses that text except for image-backed PDFs, whose
+rendered pages are analyzed visually. No extra Python packages are needed
 beyond `requirements.txt`; the readers live in `Site/file_formats.py`.
 
 | Group | Extensions | What is read |
 | --- | --- | --- |
-| PDF | `.pdf` | Text per page, OCR for scanned pages, page previews, embedded images |
+| PDF | `.pdf` | Text per page, OCR, AI visual reading for scanned pages, page previews, embedded images |
 | Images | `.jpg` `.jpeg` `.png` `.gif` `.tif` `.tiff` | OCR text (Tesseract), page preview, 3D draft from scanned plans |
 | Word | `.docx` `.doc` `.dot` `.wbk` `.rtf` | Body text, tables, headers and footers |
 | Excel | `.xlsx` `.xlsm` `.xls` `.csv` | All sheets, cell values (CSV with `,` or `;`) |
@@ -54,13 +55,14 @@ python -m unittest discover -s tests
 
 Accepted building records and their original files are stored locally in
 `data/stadtmanager.sqlite3` (the files are stored as database BLOBs). Unaccepted
-or skipped files aren't saved. Street name and house number identify a building;
-the optional building name is only a display label. A stable UUID is assigned
-to each building, and later uploads for the same normalized street and number
-are attached to that building instead of creating another one. Each source file
-remains available from the building details. If an upload conflicts with a
-saved property value, choose whether to keep or replace it before the merge is
-saved; replaced values are retained in the database history.
+or skipped files aren't saved. Street name and house number remain the unique
+address match, while each building also gets a unique, human-readable 3–8 letter
+code. The AI recommends a code for new buildings; review or edit it before
+saving. Uploads for an existing address reuse its saved code. A UUID and integer
+database key remain internal identifiers. Each source file remains available
+from the building details. If an upload conflicts with a saved property value,
+choose whether to keep or replace it before the merge is saved; replaced values
+are retained in the database history.
 
 The city map is centered on Coburg and uses OpenFreeMap/OpenStreetMap map tiles,
 so an internet connection is required.
@@ -83,17 +85,19 @@ chosen language locally. **Clear data** asks for confirmation before deleting
 all saved buildings, source files, maintenance findings, document indexes, and
 saved 3D models.
 
-Before saving an uploaded file, verify its street name and house number with
-**Verify address**. Verification uses the public OpenStreetMap address service
-to find an exact Coburg address and fill the map latitude and longitude. If no
-exact address is found, or the verified result is outside the Coburg area, the
-file will not be saved. Coordinates can also be selected directly on the map,
-but the street and house number are still checked before acceptance. Verified
-addresses become the pin position for the building and are linked to its saved
-files and 3D data. An optional full-address field can be entered or extracted
-from a document for address searches; street name and house number remain the
-required stable identity fields.
-files and 3D data.
+Address lookup runs automatically as the street and house number are entered,
+and again before saving. It uses the public OpenStreetMap service to find a
+Coburg address, fill coordinates, and reuse the code for an existing building.
+If the address search only finds the street, it also checks OpenStreetMap for a
+building explicitly tagged with that street and house number; when found, the
+pin uses the building center. Otherwise the app labels the street-level
+approximation and lets you pick a point on the map rather than claiming an exact
+building location.
+If the address cannot be verified or is outside the Coburg area, the file will
+not be saved. Coordinates can also be selected directly on the map, but the
+street and house number are still checked before acceptance. An optional
+full-address field can be entered or extracted from a document for address
+searches.
 
 To use the AI assistant, set either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
 in the server's environment. Select the matching provider in the website.
@@ -101,12 +105,17 @@ Optional `ANTHROPIC_MODEL` and `OPENAI_MODEL` variables override the default
 model names. The UI checks the key and loads available chat models before
 showing the model selector. Keys are never sent to or displayed by the browser.
 Each chat request includes saved building details and any reviewed digital-twin
-geometry from SQLite (up to the newest 100 buildings and a 14,000-character
+geometry from SQLite (up to the newest 100 buildings and a 16,000-character
 limit), along with any text from files currently uploaded in the workspace.
 Original stored file bytes are not sent as part of the database context. This
 information is sent to the selected AI provider; the assistant is told when the
 database context has been truncated. When creating a 3D draft, rendered plan
 pages are also sent to that provider.
+During document extraction, the selected provider also receives up to the
+newest 100 saved buildings' UIDs, codes, names, and addresses so it can suggest
+a possible match. The suggestion is checked against saved records and shown for
+review; it does not merge or link a building automatically. The uploaded
+document text or rendered page images are sent to the provider as well.
 
 ## Large documents, OCR, and AI search
 
@@ -131,6 +140,14 @@ text is stored in SQLite's local full-text index. Documents over the page limit,
 missing OCR languages, and indexing failures are reported in the building's
 file list.
 
+During upload, image-backed PDF pages are also visually analyzed by the
+selected AI provider. For those PDFs, field extraction receives rendered page
+images rather than the PDF's embedded text layer, which can be inaccurate even
+when it contains many characters. Visual analysis is limited to the first eight
+pages. Local text extraction and OCR remain in use for preview and saved-file
+search; the rendered images are sent to the selected provider for visual
+extraction.
+
 Every AI chat request automatically searches both the SQLite building records
 and the indexed contents of saved files. The assistant receives the bounded
 building overview plus matching building records and up to eight relevant
@@ -145,9 +162,11 @@ When a document contains explicit repair, replacement, inspection, or scheduled
 maintenance information, the AI may extract an evidence-backed suggestion.
 These findings appear on the dashboard as **Needs review** and do not become
 active alerts until a user confirms them. Findings without a supporting excerpt
-are not saved. Confirmed alerts can be dismissed or marked repaired. Scanned
-PDFs without selectable text need OCR or manual review before the AI can extract
-maintenance findings. Existing databases receive a migration that assigns
+are not saved. Confirmed alerts can be dismissed or marked repaired.
+Image-backed PDFs use AI visual analysis during upload; other PDFs rely on
+selectable text or local OCR for maintenance extraction. If neither provides
+readable content, the file needs manual review. Existing databases receive a
+migration that assigns
 stable UIDs and parses unambiguous street/number addresses; ambiguous legacy
 addresses are preserved for review rather than automatically merged.
 

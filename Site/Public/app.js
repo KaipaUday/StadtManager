@@ -25,6 +25,7 @@ const state = {
   currentImport: null,
   currentExtraction: null,
   pendingMerge: null,
+  suggestedBuildingUid: "",
   previewUrl: null,
   buildings: [],
   maintenance: [],
@@ -38,6 +39,12 @@ const state = {
   threePromise: null,
   twinViewer: null,
   addressVerified: false,
+  addressRequestId: 0,
+  addressLookupTimer: null,
+  buildingCodeManuallyEdited: false,
+  buildingCodeSource: "",
+  locationPickedManually: false,
+  pickedLocationMarker: null,
   language: "en",
 };
 sendButton.disabled = true;
@@ -70,10 +77,12 @@ const translations = {
     map: "City map",
     assistant: "AI assistant",
     checking: "Checking backend",
+    connected: "Backend connected",
+    offline: "Backend offline",
     clear: "Clear data",
-    welcome: "Good work starts",
-    welcomeAccent: "with clear data.",
-    welcomeCopy: "Bring your files together, make sense of the numbers, and move from questions to decisions.",
+    profileTitle: "Executive management",
+    profileSubtitle: "City administration",
+    buildingHealth: "BUILDING HEALTH",
     saved: "SAVED BUILDINGS",
     savedFoot: "Accepted records in database",
     maintenance: "Maintenance & alerts",
@@ -90,6 +99,74 @@ const translations = {
     ask: "Ask StadtManager",
     mapTitle: "Coburg in 3D",
     mapCopy: "Click a pin to open its PDF images and 3D model. Search saved buildings by name, address, or property.",
+    cityTwin: "CITY TWIN",
+    database: "DATABASE",
+    mapAria: "Interactive 3D map of Coburg",
+    savedBuildings: "Saved buildings",
+    mapAttribution: "Map data © OpenStreetMap contributors · Tiles by OpenFreeMap",
+    emptyMaintenance: "No repair suggestions yet. Upload a building report to look for repairs.",
+    yourData: "YOUR DATA",
+    dropSubtitle: "Choose individual files or import a folder",
+    or: "or",
+    recentFiles: "RECENT FILES",
+    workspaceReady: "Your workspace is ready",
+    uploadedFilesAppear: "Uploaded files will appear here.",
+    aiProvider: "AI provider",
+    availableModel: "Available model",
+    assistantWelcome: "Hi there! Upload a file and ask me to summarize it, find patterns, or help you make sense of the data.",
+    tryAsking: "TRY ASKING",
+    suggestionAnalysis: "What can you help me analyze?",
+    suggestionSummary: "Summarize my files",
+    chatPlaceholder: "Ask a question about your data...",
+    chatAria: "Message the AI assistant",
+    privacyHint: "Key stays here; saved building data and uploaded text go to the selected AI provider",
+    send: "Send",
+    verifyBeforeSaving: "VERIFY BEFORE SAVING",
+    reviewBuilding: "Review building data",
+    reviewCopy: "Extracted details are suggestions. Confirm or edit them before saving.",
+    skipFile: "Skip this file",
+    buildingName: "Building name",
+    buildingCode: "Building code",
+    buildingCodeHint: "AI suggestion; review or edit before saving.",
+    buildingCodePlaceholder: "e.g. SBS",
+    systemUid: "System UID",
+    optional: "Optional",
+    optionalLabel: "Optional label",
+    streetName: "Street name",
+    required: "Required",
+    houseNumber: "House number",
+    fullAddress: "Full address",
+    mapCoordinates: "Map coordinates",
+    pickMap: "Pick on map",
+    latitude: "Latitude",
+    longitude: "Longitude",
+    buildingDetails: "Building details",
+    editableFields: "AI-extracted fields can be edited.",
+    addField: "+ Add field",
+    acceptSave: "Accept & save building",
+    sourceDocument: "Source document",
+    uploadImagePreview: "Uploaded image preview",
+    savedBuildings: "Saved buildings",
+    database: "DATABASE",
+    searchBuildings: "Search buildings and properties",
+    noBuildings: "Accepted building records will appear here.",
+    buildingTwin: "BUILDING DIGITAL TWIN",
+    building: "Building",
+    close: "Close",
+    buildingFiles: "Building files",
+    reviewRequired: "Review required",
+    pdfImages: "Images from the PDF",
+    simplifiedModel: "Simplified 3D model",
+    aiEstimate: "AI estimate",
+    generateFromPlan: "Generate a draft from a saved PDF floor plan.",
+    twinProviderNote: "Generating a draft sends up to five rendered PDF pages to the selected AI provider.",
+    twinScaleNote: "The generated geometry is approximate and should be checked against the source plan.",
+    editableRooms: "Editable rooms in the 3D model",
+    twinSource: "PDF source document",
+    generateTwin: "Generate 3D draft",
+    saveTwin: "Save reviewed model",
+    footerTagline: "A clearer view of your city",
+    footerBuilt: "Built for thoughtful decisions.",
   },
   de: {
     workspace: "Arbeitsbereich",
@@ -98,10 +175,12 @@ const translations = {
     map: "Stadtkarte",
     assistant: "KI-Assistent",
     checking: "Backend wird geprüft",
+    connected: "Backend verbunden",
+    offline: "Backend nicht erreichbar",
     clear: "Daten löschen",
-    welcome: "Gute Arbeit beginnt",
-    welcomeAccent: "mit klaren Daten.",
-    welcomeCopy: "Fügen Sie Ihre Dateien zusammen, verstehen Sie die Zahlen und treffen Sie fundierte Entscheidungen.",
+    profileTitle: "Geschäftsführung",
+    profileSubtitle: "Stadtverwaltung",
+    buildingHealth: "GEBÄUDEZUSTAND",
     saved: "GESPEICHERTE GEBÄUDE",
     savedFoot: "Bestätigte Datensätze in der Datenbank",
     maintenance: "Wartung & Meldungen",
@@ -118,6 +197,74 @@ const translations = {
     ask: "StadtManager fragen",
     mapTitle: "Coburg in 3D",
     mapCopy: "Klicken Sie auf eine Stecknadel, um PDF-Bilder und 3D-Modell zu öffnen. Suchen Sie Gebäude nach Name, Adresse oder Eigenschaft.",
+    cityTwin: "DIGITALES STADTMODELL",
+    database: "DATENBANK",
+    mapAria: "Interaktive 3D-Karte von Coburg",
+    savedBuildings: "Gespeicherte Gebäude",
+    mapAttribution: "Kartendaten © OpenStreetMap-Mitwirkende · Kartenkacheln von OpenFreeMap",
+    emptyMaintenance: "Noch keine Reparaturvorschläge. Laden Sie einen Gebäudereport hoch, um Reparaturbedarf zu erkennen.",
+    yourData: "IHRE DATEN",
+    dropSubtitle: "Einzelne Dateien auswählen oder einen Ordner importieren",
+    or: "oder",
+    recentFiles: "LETZTE DATEIEN",
+    workspaceReady: "Ihr Arbeitsbereich ist bereit",
+    uploadedFilesAppear: "Hochgeladene Dateien werden hier angezeigt.",
+    aiProvider: "KI-Anbieter",
+    availableModel: "Verfügbares Modell",
+    assistantWelcome: "Hallo! Laden Sie eine Datei hoch und bitten Sie mich, sie zusammenzufassen, Muster zu finden oder die Daten zu erklären.",
+    tryAsking: "FRAGEN SIE ZUM BEISPIEL",
+    suggestionAnalysis: "Welche Analysen können Sie durchführen?",
+    suggestionSummary: "Fassen Sie meine Dateien zusammen",
+    chatPlaceholder: "Stellen Sie eine Frage zu Ihren Daten …",
+    chatAria: "Nachricht an den KI-Assistenten",
+    privacyHint: "Der Schlüssel bleibt hier; gespeicherte Gebäudedaten und Dateitexte werden an den ausgewählten KI-Anbieter gesendet",
+    send: "Senden",
+    verifyBeforeSaving: "VOR DEM SPEICHERN PRÜFEN",
+    reviewBuilding: "Gebäudedaten prüfen",
+    reviewCopy: "Extrahierte Angaben sind Vorschläge. Prüfen oder bearbeiten Sie sie vor dem Speichern.",
+    skipFile: "Datei überspringen",
+    buildingName: "Gebäudename",
+    buildingCode: "Gebäudekürzel",
+    buildingCodeHint: "KI-Vorschlag; vor dem Speichern prüfen oder bearbeiten.",
+    buildingCodePlaceholder: "z. B. SBS",
+    systemUid: "System-UID",
+    optional: "Optional",
+    optionalLabel: "Optionale Bezeichnung",
+    streetName: "Straße",
+    required: "Erforderlich",
+    houseNumber: "Hausnummer",
+    fullAddress: "Vollständige Adresse",
+    mapCoordinates: "Kartenkoordinaten",
+    pickMap: "Auf Karte auswählen",
+    latitude: "Breitengrad",
+    longitude: "Längengrad",
+    buildingDetails: "Gebäudedetails",
+    editableFields: "KI-extrahierte Angaben können bearbeitet werden.",
+    addField: "+ Feld hinzufügen",
+    acceptSave: "Gebäude bestätigen und speichern",
+    sourceDocument: "Quelldokument",
+    uploadImagePreview: "Vorschau des hochgeladenen Bildes",
+    savedBuildings: "Gespeicherte Gebäude",
+    database: "DATENBANK",
+    searchBuildings: "Gebäude und Eigenschaften suchen",
+    noBuildings: "Bestätigte Gebäude werden hier angezeigt.",
+    buildingTwin: "DIGITALER GEBÄUDEZWILLING",
+    building: "Gebäude",
+    close: "Schließen",
+    buildingFiles: "Gebäudedateien",
+    reviewRequired: "Prüfung erforderlich",
+    pdfImages: "Bilder aus dem PDF",
+    simplifiedModel: "Vereinfachtes 3D-Modell",
+    aiEstimate: "KI-Schätzung",
+    generateFromPlan: "Erstellen Sie einen Entwurf aus einem gespeicherten PDF-Grundriss.",
+    twinProviderNote: "Für einen Entwurf werden bis zu fünf gerenderte PDF-Seiten an den ausgewählten KI-Anbieter gesendet.",
+    twinScaleNote: "Die Geometrie ist ungefähr und sollte anhand des Quelldokuments geprüft werden.",
+    editableRooms: "Bearbeitbare Räume im 3D-Modell",
+    twinSource: "PDF-Quelldokument",
+    generateTwin: "3D-Entwurf erstellen",
+    saveTwin: "Geprüftes Modell speichern",
+    footerTagline: "Ihre Stadt im klaren Überblick",
+    footerBuilt: "Für fundierte Entscheidungen entwickelt.",
   },
 };
 
@@ -128,46 +275,33 @@ function applyLanguage(language) {
   document.querySelector("#language-en").classList.toggle("active", language === "en");
   document.querySelector("#language-de").classList.toggle("active", language === "de");
   const t = translations[language];
-  const text = {
-    "[data-i18n=\"workspace\"]": t.workspace,
-    "[data-i18n=\"overview\"]": t.overview,
-    "[data-i18n=\"files\"]": t.files,
-    "[data-i18n=\"map\"]": t.map,
-    "[data-i18n=\"assistant\"]": t.assistant,
-    "[data-i18n=\"checking\"]": t.checking,
-    "[data-i18n=\"clear\"]": t.clear,
-    "[data-i18n=\"welcome\"]": t.welcome,
-    "[data-i18n=\"welcomeAccent\"]": t.welcomeAccent,
-    "[data-i18n=\"welcomeCopy\"]": t.welcomeCopy,
-    "[data-i18n=\"saved\"]": t.saved,
-    "[data-i18n=\"savedFoot\"]": t.savedFoot,
-    "[data-i18n=\"maintenance\"]": t.maintenance,
-    "[data-i18n=\"maintenanceCopy\"]": t.maintenanceCopy,
-    "[data-i18n=\"fileWorkspace\"]": t.fileWorkspace,
-    "[data-i18n=\"fileCopy\"]": t.fileCopy,
-    "[data-i18n=\"drop\"]": t.drop,
-    "[data-i18n=\"browseFiles\"]": t.browseFiles,
-    "[data-i18n=\"browseFolder\"]": t.browseFolder,
-    "[data-i18n=\"fileLimits\"]": t.fileLimits,
-    "[data-i18n=\"fileSize\"]": t.fileSize,
-    "[data-i18n=\"formatsFoot\"]": t.formatsFoot,
-    "[data-i18n=\"aiPartner\"]": t.aiPartner,
-    "[data-i18n=\"ask\"]": t.ask,
-    "[data-i18n=\"mapTitle\"]": t.mapTitle,
-    "[data-i18n=\"mapCopy\"]": t.mapCopy,
-  };
-  for (const [selector, value] of Object.entries(text)) {
-    for (const element of document.querySelectorAll(selector)) element.textContent = value;
+  for (const element of document.querySelectorAll("[data-i18n]")) {
+    const value = t[element.dataset.i18n];
+    if (typeof value === "string") element.textContent = value;
+  }
+  for (const element of document.querySelectorAll("[data-i18n-placeholder]")) {
+    const value = t[element.dataset.i18nPlaceholder];
+    if (typeof value === "string") element.setAttribute("placeholder", value);
+  }
+  for (const element of document.querySelectorAll("[data-i18n-aria-label]")) {
+    const value = t[element.dataset.i18nAriaLabel];
+    if (typeof value === "string") element.setAttribute("aria-label", value);
+  }
+  for (const element of document.querySelectorAll("[data-i18n-alt]")) {
+    const value = t[element.dataset.i18nAlt];
+    if (typeof value === "string") element.setAttribute("alt", value);
   }
   document.querySelector("#language-toggle").setAttribute(
     "aria-label",
     language === "en" ? "Zur deutschen Oberfläche wechseln" : "Switch to English interface",
   );
-  const now = new Date();
-  document.querySelector("#current-date").textContent = new Intl.DateTimeFormat(
-    language === "de" ? "de-DE" : "en-GB",
-    { weekday: "short", month: "short", day: "numeric", year: "numeric" },
-  ).format(now);
+  if (state.currentImport) {
+    document.querySelector("#preview-kind").textContent = previewKindLabel(
+      state.currentExtraction?.kind || fileExtension(state.currentImport.name).toUpperCase(),
+      state.currentExtraction?.extraction_method,
+    );
+  }
+  renderMaintenanceOverview();
 }
 
 function showToast(message) {
@@ -315,7 +449,10 @@ function displayPreview(file, result = null) {
   const textPreview = document.querySelector("#text-preview");
   const extension = fileExtension(file.name);
   document.querySelector("#preview-filename").textContent = file.name;
-  document.querySelector("#preview-kind").textContent = result?.kind || extension.toUpperCase();
+  document.querySelector("#preview-kind").textContent = previewKindLabel(
+    result?.kind || extension.toUpperCase(),
+    result?.extraction_method,
+  );
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.previewUrl = null;
   if (extension === "pdf") {
@@ -343,6 +480,10 @@ function displayPreview(file, result = null) {
     textPreview.hidden = false;
   }
 }
+function previewKindLabel(kind, extractionMethod) {
+  if (extractionMethod !== "vision") return kind;
+  return state.language === "de" ? `${kind} · KI-Bildanalyse` : `${kind} · AI visual read`;
+}
 
 function setReviewEditingEnabled(enabled) {
   for (const control of document.querySelectorAll(".review-form input, .review-form select, .review-form button")) {
@@ -353,13 +494,21 @@ function setReviewEditingEnabled(enabled) {
 function showExtraction(result) {
   state.currentExtraction = result;
   state.addressVerified = false;
+  state.suggestedBuildingUid = result.building_match?.exact_address_match ? result.building_match.uid : "";
+  renderBuildingMatch(result.building_match);
   document.querySelector("#object-name").value = result.object_name || "";
+  document.querySelector("#building-code").value = result.building_code || "";
+  state.buildingCodeManuallyEdited = false;
+  state.buildingCodeSource = result.building_code_source || (result.building_code_existing ? "existing" : "");
   document.querySelector("#street-name").value = result.street_name || "";
   document.querySelector("#house-number").value = result.house_number || "";
   document.querySelector("#full-address").value = result.address || "";
   document.querySelector("#building-latitude").value = result.latitude ?? "";
   document.querySelector("#building-longitude").value = result.longitude ?? "";
-  document.querySelector("#preview-kind").textContent = result.kind || "";
+  document.querySelector("#preview-kind").textContent = previewKindLabel(
+    result.kind || "",
+    result.extraction_method,
+  );
   const notice = document.querySelector("#extraction-notice");
   notice.textContent = result.extraction_error || "";
   notice.hidden = !result.extraction_error;
@@ -372,6 +521,32 @@ function showExtraction(result) {
   }
   if (!fieldList.children.length) fieldList.append(createFieldRow());
   renderExtractedMaintenance(result.maintenance_findings || []);
+  scheduleAddressValidation();
+}
+
+function renderBuildingMatch(match) {
+  const panel = document.querySelector("#building-match");
+  panel.replaceChildren();
+  if (!match) {
+    panel.hidden = true;
+    return;
+  }
+  const exactAddressMatch = Boolean(match.exact_address_match);
+  const identity = [
+    match.object_name || "",
+    match.building_code || "",
+    match.address || "",
+    match.uid ? `UID ${match.uid}` : "",
+  ].filter(Boolean).join(" · ");
+  const message = state.language === "de"
+    ? exactAddressMatch
+      ? `Gespeichertes Gebäude mit übereinstimmender Adresse: ${identity}. Bitte vor dem Speichern prüfen.`
+      : `Möglicher Treffer der KI – bitte manuell prüfen: ${identity}. Es wird nichts automatisch zusammengeführt.`
+    : exactAddressMatch
+      ? `Saved building with matching address: ${identity}. Review before saving.`
+      : `Possible AI match — please review: ${identity}. Nothing will be merged automatically.`;
+  panel.textContent = message;
+  panel.hidden = false;
 }
 
 function renderExtractedMaintenance(findings) {
@@ -404,10 +579,12 @@ function renderExtractedMaintenance(findings) {
 function renderMergeReview(detail) {
   const panel = document.querySelector("#merge-review");
   const previous = state.pendingMerge;
+  const candidates = detail.candidates || previous?.candidates || [];
+  const proposedTargetUid = previous?.targetUid || state.suggestedBuildingUid;
   state.pendingMerge = {
-    targetUid: previous?.targetUid || "",
+    targetUid: candidates.some((candidate) => candidate.uid === proposedTargetUid) ? proposedTargetUid : "",
     resolutions: previous?.resolutions || {},
-    candidates: detail.candidates || previous?.candidates || [],
+    candidates,
     conflicts: detail.conflicts || [],
     buildingUid: detail.building_uid || previous?.buildingUid || "",
   };
@@ -432,11 +609,19 @@ function renderMergeReview(detail) {
     for (const candidate of state.pendingMerge.candidates) {
       const option = document.createElement("option");
       option.value = candidate.uid;
-      option.textContent = `${candidate.object_name} · ${candidate.address} · ${candidate.uid}`;
+      option.textContent = `${candidate.object_name} · ${candidate.building_code} · ${candidate.address}`;
       select.append(option);
     }
     select.value = state.pendingMerge.targetUid;
-    select.addEventListener("change", () => { state.pendingMerge.targetUid = select.value; });
+    select.addEventListener("change", () => {
+      state.pendingMerge.targetUid = select.value;
+      const selected = state.pendingMerge.candidates.find((candidate) => candidate.uid === select.value);
+      if (selected?.building_code) {
+        document.querySelector("#building-code").value = selected.building_code;
+        state.buildingCodeSource = "existing";
+        state.buildingCodeManuallyEdited = false;
+      }
+    });
     label.append(select);
     panel.append(label);
   }
@@ -496,12 +681,21 @@ async function processNextImport() {
   document.querySelector("#review-status").textContent = "Extracting document fields…";
   setReviewEditingEnabled(false);
   document.querySelector("#object-name").value = "";
+  document.querySelector("#building-code").value = "";
+  state.buildingCodeManuallyEdited = false;
+  state.buildingCodeSource = "";
   document.querySelector("#street-name").value = "";
   document.querySelector("#house-number").value = "";
   document.querySelector("#full-address").value = "";
   document.querySelector("#building-latitude").value = "";
   document.querySelector("#building-longitude").value = "";
+  state.locationPickedManually = false;
+  state.currentExtraction = null;
+  state.suggestedBuildingUid = "";
+  state.pickedLocationMarker?.remove();
+  state.pickedLocationMarker = null;
   document.querySelector("#extraction-maintenance").hidden = true;
+  renderBuildingMatch(null);
   document.querySelector("#merge-review").hidden = true;
   document.querySelector("#accept-building").textContent = "Accept & save building";
   state.pendingMerge = null;
@@ -536,11 +730,14 @@ async function processNextImport() {
 }
 
 function finishCurrentImport() {
+  state.addressRequestId += 1;
+  clearTimeout(state.addressLookupTimer);
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.previewUrl = null;
   state.currentImport = null;
   state.currentExtraction = null;
   state.pendingMerge = null;
+  state.suggestedBuildingUid = "";
   state.importCompleted += 1;
   processNextImport();
 }
@@ -552,24 +749,88 @@ async function validateAddress() {
   if (!streetName || !houseNumber) {
     throw new Error("Enter a street name and house number before saving.");
   }
-  document.querySelector("#review-status").textContent = "Verifying this exact Coburg address…";
+  const requestId = ++state.addressRequestId;
+  document.querySelector("#review-status").textContent = state.language === "de"
+    ? "Adresse wird mit der Karte abgeglichen…"
+    : "Verifying this Coburg address against the map…";
   const formData = new FormData();
   formData.append("street_name", streetName);
   formData.append("house_number", houseNumber);
   formData.append("full_address", fullAddress);
   const response = await fetch("/api/address/validate", { method: "POST", body: formData });
   const result = await response.json();
+  if (
+    requestId !== state.addressRequestId
+    || streetName !== document.querySelector("#street-name").value.trim()
+    || houseNumber !== document.querySelector("#house-number").value.trim()
+    || fullAddress !== document.querySelector("#full-address").value.trim()
+  ) return null;
   if (!response.ok) {
     const detail = result.detail;
     const message = typeof detail === "object" ? detail.message : detail;
     throw new Error(message || "This address could not be verified.");
   }
-  document.querySelector("#building-latitude").value = Number(result.latitude).toFixed(6);
-  document.querySelector("#building-longitude").value = Number(result.longitude).toFixed(6);
+  const buildingCodeInput = document.querySelector("#building-code");
+  if (!state.buildingCodeManuallyEdited && (result.building_code_existing || state.buildingCodeSource !== "ai")) {
+    buildingCodeInput.value = result.building_code || "";
+    state.buildingCodeSource = result.building_code_source || "";
+  }
+  if (!state.locationPickedManually) {
+    document.querySelector("#building-latitude").value = Number(result.latitude).toFixed(6);
+    document.querySelector("#building-longitude").value = Number(result.longitude).toFixed(6);
+  }
   state.addressVerified = true;
-  document.querySelector("#review-status").textContent =
-    `Verified address: ${result.display_name}.`;
+  const streetLevelMatch = result.address_match === "street-and-coburg-area";
+  const buildingFootprint = result.location_precision === "building";
+  const possibleAiMatch = state.currentExtraction?.building_match;
+  renderBuildingMatch(
+    result.building_match || (possibleAiMatch && !possibleAiMatch.exact_address_match ? possibleAiMatch : null),
+  );
+  state.suggestedBuildingUid = result.matched_building_uid || "";
+  document.querySelector("#review-status").textContent = state.language === "de"
+    ? buildingFootprint
+      ? state.locationPickedManually
+        ? `Gebäudeumriss gefunden; Ihre manuelle Kartenposition wurde beibehalten.`
+        : `Gebäudeumriss gefunden; die Kartenposition zeigt die Gebäudemitte: ${result.display_name}.`
+      : streetLevelMatch
+        ? state.locationPickedManually
+          ? `Straße gefunden; keine genaue Hausnummernposition in der Karte. Ihre Kartenposition wurde beibehalten.`
+          : `Straße gefunden; keine genaue Hausnummernposition in der Karte. Straßenposition verwendet: ${result.display_name}.`
+        : state.locationPickedManually
+          ? `Adresse gefunden: ${result.display_name}. Kartenposition wurde beibehalten.`
+          : `Adresse gefunden: ${result.display_name}.`
+    : buildingFootprint
+      ? state.locationPickedManually
+        ? "A building footprint was found; your manually selected map point was kept."
+        : `A building footprint was found; the pin is at the building center: ${result.display_name}.`
+      : streetLevelMatch
+        ? state.locationPickedManually
+          ? "Street found, but the map has no exact house-number location. Your selected map point was kept."
+          : `Street found, but the map has no exact house-number location. Using street location: ${result.display_name}.`
+        : state.locationPickedManually
+          ? `Address found: ${result.display_name}. Your selected map point was kept.`
+          : `Address found: ${result.display_name}.`;
   return result;
+}
+
+function scheduleAddressValidation() {
+  clearTimeout(state.addressLookupTimer);
+  const streetName = document.querySelector("#street-name").value.trim();
+  const houseNumber = document.querySelector("#house-number").value.trim();
+  if (!streetName || !houseNumber) return;
+  state.addressLookupTimer = setTimeout(async () => {
+    try {
+      await validateAddress();
+    } catch (error) {
+      if (state.language === "de") {
+        document.querySelector("#review-status").textContent =
+          `Adresse konnte nicht gefunden werden: ${error.message || "Prüfung fehlgeschlagen."}`;
+      } else {
+        document.querySelector("#review-status").textContent =
+          `Could not find address: ${error.message || "Verification failed."}`;
+      }
+    }
+  }, 800);
 }
 
 async function acceptBuilding() {
@@ -595,6 +856,14 @@ async function acceptBuilding() {
       document.querySelector("#review-status").textContent = error.message || "Address verification failed.";
       return;
     }
+  }
+  const buildingCode = document.querySelector("#building-code").value.trim().toUpperCase();
+  if (!/^[A-Z]{3,8}$/.test(buildingCode)) {
+    document.querySelector("#building-code").focus();
+    document.querySelector("#review-status").textContent = state.language === "de"
+      ? "Geben Sie ein Gebäudekürzel aus 3 bis 8 Buchstaben ein."
+      : "Enter a building code containing 3 to 8 letters.";
+    return;
   }
 
   if (state.pendingMerge?.candidates.length && !state.pendingMerge.targetUid) {
@@ -626,12 +895,14 @@ async function acceptBuilding() {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("object_name", objectName);
+  formData.append("building_code", buildingCode);
   formData.append("street_name", streetName);
   formData.append("house_number", houseNumber);
   formData.append("address", document.querySelector("#full-address").value.trim());
   formData.append("latitude", document.querySelector("#building-latitude").value.trim());
   formData.append("longitude", document.querySelector("#building-longitude").value.trim());
   formData.append("address_verified", state.addressVerified ? "true" : "false");
+  formData.append("location_manually_selected", state.locationPickedManually ? "true" : "false");
   formData.append("fields_json", JSON.stringify(fields));
   formData.append("maintenance_json", JSON.stringify(state.currentExtraction?.maintenance_findings || []));
   formData.append("merge_target_uid", state.pendingMerge?.targetUid || "");
@@ -675,7 +946,7 @@ async function acceptBuilding() {
       ? ` ${result.maintenance_suggestion_count} maintenance suggestion${result.maintenance_suggestion_count === 1 ? "" : "s"} need review.`
       : "";
     showToast(
-      `${result.object_name} ${result.merged ? "updated with the new file" : "saved to the city database"} under UID ${result.uid}.${imageCount}${maintenanceNote}${assetWarning}`,
+      `${result.object_name} ${result.merged ? "updated with the new file" : "saved to the city database"} as ${result.building_code}.${imageCount}${maintenanceNote}${assetWarning}`,
     );
     finishCurrentImport();
   } catch (error) {
@@ -713,6 +984,7 @@ function renderBuildings() {
     const matches = state.buildings.filter((building) => {
       const searchable = [
         building.object_name,
+        building.building_code,
         building.address,
         building.uid,
         building.street_name,
@@ -741,6 +1013,7 @@ function renderBuildings() {
       const heating = building.fields["Heating system"];
       details.textContent = [
         building.address || "No address",
+        building.building_code && `${translations[state.language].buildingCode}: ${building.building_code}`,
         heating && `Heating: ${heating}`,
         building.latitude === null && "No map location",
       ].filter(Boolean).join(" · ");
@@ -785,9 +1058,13 @@ function renderBuildings() {
     const element = document.createElement("button");
     element.className = "city-marker";
     element.type = "button";
-    element.title = building.object_name;
+    element.title = `${building.building_code} · ${building.object_name}`;
     element.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (state.pickingLocation) {
+        selectMapLocation(building.longitude, building.latitude, building.object_name);
+        return;
+      }
       openBuildingDetails(building.id);
     });
     const marker = new maplibregl.Marker({ element })
@@ -796,6 +1073,25 @@ function renderBuildings() {
     element.setAttribute("aria-label", `Open digital twin for ${building.object_name}`);
     state.mapMarkers.push(marker);
   }
+}
+
+function selectMapLocation(longitude, latitude, label = "") {
+  document.querySelector("#building-latitude").value = Number(latitude).toFixed(6);
+  document.querySelector("#building-longitude").value = Number(longitude).toFixed(6);
+  state.locationPickedManually = true;
+  state.addressVerified = false;
+  state.addressRequestId += 1;
+  clearTimeout(state.addressLookupTimer);
+  state.pickedLocationMarker?.remove();
+  state.pickedLocationMarker = new maplibregl.Marker({ color: "#bd604b" })
+    .setLngLat([longitude, latitude])
+    .addTo(state.map);
+  document.querySelector("#review-status").textContent = state.language === "de"
+    ? `Kartenposition ausgewählt${label ? `: ${label}` : ""}. Sie wird beim Speichern beibehalten.`
+    : `Map location selected${label ? `: ${label}` : ""}. It will be kept when saved.`;
+  state.pickingLocation = false;
+  state.map.getCanvas().style.cursor = "";
+  document.querySelector("#review-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function clearTwinViewer() {
@@ -1035,7 +1331,7 @@ function renderMaintenanceOverview() {
   renderMaintenanceCards(
     document.querySelector("#maintenance-list"),
     state.maintenance,
-    "No repair suggestions yet. Upload a building report to look for repairs.",
+    translations[state.language].emptyMaintenance,
   );
 }
 
@@ -1091,7 +1387,8 @@ async function openBuildingDetails(buildingId) {
   const dialog = document.querySelector("#building-detail-dialog");
   document.querySelector("#building-detail-title").textContent = building.object_name;
   document.querySelector("#building-detail-address").textContent = building.address || "No address recorded";
-  document.querySelector("#building-detail-uid").textContent = `Building UID: ${building.uid}`;
+  document.querySelector("#building-detail-uid").textContent =
+    `${translations[state.language].buildingCode}: ${building.building_code} · ${translations[state.language].systemUid}: ${building.uid}`;
   document.querySelector("#building-detail-warning").hidden = true;
   document.querySelector("#building-image-gallery").textContent = "Loading PDF images…";
   document.querySelector("#building-image-count").textContent = "";
@@ -1361,13 +1658,7 @@ function initializeCityMap() {
   });
   state.map.on("click", (event) => {
     if (!state.pickingLocation) return;
-    document.querySelector("#building-latitude").value = event.lngLat.lat.toFixed(6);
-    document.querySelector("#building-longitude").value = event.lngLat.lng.toFixed(6);
-    state.addressVerified = false;
-    document.querySelector("#review-status").textContent = "Map location selected.";
-    state.pickingLocation = false;
-    state.map.getCanvas().style.cursor = "";
-    document.querySelector("#review-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    selectMapLocation(event.lngLat.lng, event.lngLat.lat);
   });
 }
 
@@ -1528,24 +1819,39 @@ document.querySelector("#twin-room-list").addEventListener("change", (event) => 
   document.querySelector("#twin-status").textContent = "Draft edited. Review the updated 3D model before saving.";
   renderTwin(state.twinDraft, state.activeBuildingId);
 });
-document.querySelector("#validate-address").addEventListener("click", async () => {
-  try {
-    await validateAddress();
-  } catch (error) {
-    state.addressVerified = false;
-    document.querySelector("#review-status").textContent = error.message || "Address verification failed.";
-  }
-});
 for (const id of ["street-name", "house-number", "full-address"]) {
-  document.querySelector(`#${id}`).addEventListener("input", () => {
+  const field = document.querySelector(`#${id}`);
+  field.addEventListener("input", () => {
     state.addressVerified = false;
+    state.locationPickedManually = false;
+    state.suggestedBuildingUid = "";
+    if (state.currentExtraction) state.currentExtraction.building_match = null;
+    renderBuildingMatch(null);
+    if (!state.buildingCodeManuallyEdited && state.buildingCodeSource !== "ai") {
+      document.querySelector("#building-code").value = "";
+      state.buildingCodeSource = "";
+    }
+    state.addressRequestId += 1;
+    clearTimeout(state.addressLookupTimer);
+    state.pickedLocationMarker?.remove();
+    state.pickedLocationMarker = null;
+    document.querySelector("#building-latitude").value = "";
+    document.querySelector("#building-longitude").value = "";
   });
+  field.addEventListener("change", scheduleAddressValidation);
+  field.addEventListener("blur", scheduleAddressValidation);
 }
+document.querySelector("#building-code").addEventListener("input", () => {
+  state.buildingCodeManuallyEdited = true;
+  state.buildingCodeSource = "manual";
+});
 document.querySelector("#building-latitude").addEventListener("input", () => {
   state.addressVerified = false;
+  state.locationPickedManually = true;
 });
 document.querySelector("#building-longitude").addEventListener("input", () => {
   state.addressVerified = false;
+  state.locationPickedManually = true;
 });
 document.querySelector("#add-field").addEventListener("click", () => {
   const row = createFieldRow();
@@ -1554,12 +1860,18 @@ document.querySelector("#add-field").addEventListener("click", () => {
 });
 document.querySelector("#pick-location").addEventListener("click", () => {
   if (!state.currentImport) return;
-  state.pickingLocation = true;
-  document.querySelector("#review-status").textContent = "Click the map to set this building's location.";
-  if (state.map) {
-    state.map.getCanvas().style.cursor = "crosshair";
-    document.querySelector("#city-map").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!state.mapLoaded || !state.map) {
+    document.querySelector("#review-status").textContent = state.language === "de"
+      ? "Die Karte wird noch geladen. Bitte versuchen Sie es gleich erneut."
+      : "The map is still loading. Please try again in a moment.";
+    return;
   }
+  state.pickingLocation = true;
+  document.querySelector("#review-status").textContent = state.language === "de"
+    ? "Klicken Sie auf die Karte, um den Gebäudestandort festzulegen."
+    : "Click the map to set this building's location.";
+  state.map.getCanvas().style.cursor = "crosshair";
+  document.querySelector("#city-map").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 dropzone.addEventListener("dragover", (event) => {
   event.preventDefault();
@@ -1627,9 +1939,10 @@ fetch("/api/health")
     if (!response.ok) throw new Error("Backend unavailable");
     return response.json();
   })
-  .then(() => { document.querySelector("#backend-label").textContent = "Backend connected"; })
+  .then(() => { document.querySelector("#backend-label").dataset.i18n = "connected"; applyLanguage(state.language); })
   .catch(() => {
-    document.querySelector("#backend-label").textContent = "Backend offline";
+    document.querySelector("#backend-label").dataset.i18n = "offline";
+    applyLanguage(state.language);
     document.querySelector(".status-dot").classList.add("offline");
   });
 

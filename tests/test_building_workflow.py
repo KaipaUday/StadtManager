@@ -43,6 +43,7 @@ class BuildingWorkflowTests(unittest.TestCase):
         os.environ["ANTHROPIC_API_KEY"] = "test-key-not-sent"
         extraction = {
             "object_name": "Coburg Town Hall",
+            "building_code": "CTH",
             "address": "Marktplatz 1, Coburg",
             "latitude": 50.258,
             "longitude": 10.964,
@@ -75,6 +76,7 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         extracted = response.json()
         self.assertEqual(extracted["object_name"], "Coburg Town Hall")
+        self.assertEqual(extracted["building_code"], "CTH")
         self.assertEqual((extracted["street_name"], extracted["house_number"]), ("Marktplatz", "1"))
         self.assertEqual(extracted["fields"]["Heating system"], "District heating")
         self.assertEqual(extracted["other_fields"], [{"name": "Roof material", "value": "Slate"}])
@@ -84,6 +86,7 @@ class BuildingWorkflowTests(unittest.TestCase):
             "/api/buildings",
             data={
                 "object_name": extracted["object_name"],
+                "building_code": extracted["building_code"],
                 "street_name": extracted["street_name"],
                 "house_number": extracted["house_number"],
                 "latitude": str(extracted["latitude"]),
@@ -98,6 +101,7 @@ class BuildingWorkflowTests(unittest.TestCase):
 
         building = self.client.get("/api/buildings").json()["buildings"][0]
         self.assertEqual(building["object_name"], "Coburg Town Hall")
+        self.assertEqual(building["building_code"], "CTH")
         self.assertEqual(building["address"], "Marktplatz 1, Coburg")
         self.assertTrue(building["uid"])
         self.assertEqual(building["fields"], {
@@ -172,6 +176,40 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(response.json()["latitude"], 50.258)
         self.assertEqual(response.json()["longitude"], 10.964)
 
+    def test_saving_verified_address_keeps_manually_selected_map_coordinates(self) -> None:
+        verified_location = {"latitude": 50.258, "longitude": 10.964}
+        selected_location = (50.263, 10.971)
+        with patch.object(module, "geocode_coburg_address", return_value=verified_location):
+            response = self.client.post(
+                "/api/buildings",
+                data={
+                    "street_name": "Marktplatz",
+                    "house_number": "1",
+                    "latitude": str(selected_location[0]),
+                    "longitude": str(selected_location[1]),
+                    "address_verified": "true",
+                    "location_manually_selected": "true",
+                },
+                files={"file": ("town-hall.txt", b"Town hall details", "text/plain")},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        building = self.client.get("/api/buildings").json()["buildings"][0]
+        self.assertEqual((building["latitude"], building["longitude"]), selected_location)
+
+        outside_coburg = self.client.post(
+            "/api/buildings",
+            data={
+                "street_name": "Marktplatz",
+                "house_number": "2",
+                "latitude": "0",
+                "longitude": "0",
+                "location_manually_selected": "true",
+            },
+            files={"file": ("town-hall-2.txt", b"Town hall details", "text/plain")},
+        )
+        self.assertEqual(outside_coburg.status_code, 422)
+
     def test_existing_coburg_street_is_accepted_without_house_number_result(self) -> None:
         response_data = json.dumps([{
             "lat": "50.2563712",
@@ -207,6 +245,55 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["address_match"], "street-and-coburg-area")
         self.assertFalse(response.json()["house_number_verified"])
+        self.assertEqual(response.json()["location_precision"], "street")
+
+    def test_exact_osm_building_footprint_improves_street_fallback(self) -> None:
+        street_response = json.dumps([{
+            "lat": "50.2563712",
+            "lon": "10.9557614",
+            "display_name": "Plattenäcker, Coburg, 96450",
+            "address": {"road": "Plattenäcker", "town": "Coburg", "postcode": "96450"},
+        }]).encode("utf-8")
+        building_response = json.dumps({
+            "elements": [{
+                "type": "way",
+                "center": {"lat": 50.257, "lon": 10.956},
+                "tags": {
+                    "addr:street": "Plattenäcker",
+                    "addr:housenumber": "30",
+                    "building": "yes",
+                },
+            }],
+        }).encode("utf-8")
+
+        class Response:
+            def __init__(self, data: bytes):
+                self.data = data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return self.data
+
+        with patch.object(
+            module,
+            "urlopen",
+            side_effect=[Response(street_response), Response(building_response)],
+        ):
+            response = self.client.post(
+                "/api/address/validate",
+                data={"street_name": "Plattenäcker", "house_number": "30"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["address_match"], "exact-building")
+        self.assertEqual(response.json()["location_precision"], "building")
+        self.assertTrue(response.json()["house_number_verified"])
+        self.assertEqual((response.json()["latitude"], response.json()["longitude"]), (50.257, 10.956))
 
     def test_full_address_is_used_for_geocoding(self) -> None:
         response_data = json.dumps([{
@@ -278,6 +365,22 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/buildings").json()["buildings"], [])
         self.assertEqual(self.client.get("/api/maintenance").json()["items"], [])
 
+    def test_health_is_unavailable_when_configured_database_file_is_missing(self) -> None:
+        configured_path = module.DB_PATH
+        module.DB_PATH = Path(self.database_directory.name) / "missing.sqlite3"
+        try:
+            response = self.client.get("/api/health")
+        finally:
+            module.DB_PATH = configured_path
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("database file is missing", response.json()["detail"])
+
+    def test_health_reports_database_available(self) -> None:
+        response = self.client.get("/api/health")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {"status": "ok", "database": "ok"})
+
     def test_address_is_required_and_building_name_is_optional(self) -> None:
         response = self.client.post(
             "/api/buildings",
@@ -295,6 +398,88 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(saved.status_code, 200, saved.text)
         self.assertEqual(saved.json()["object_name"], "Hauptstraße 5a")
         self.assertTrue(saved.json()["uid"])
+
+    def test_building_code_is_unique_and_reused_for_existing_address(self) -> None:
+        first = self.client.post(
+            "/api/buildings",
+            data={
+                "street_name": "Marktplatz",
+                "house_number": "1",
+                "building_code": "SBS",
+            },
+            files={"file": ("town-hall.txt", b"Town hall", "text/plain")},
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["building_code"], "SBS")
+        first_uid = first.json()["uid"]
+
+        second = self.client.post(
+            "/api/buildings",
+            data={"street_name": "Marktplatz", "house_number": "1"},
+            files={"file": ("town-hall-update.txt", b"Updated details", "text/plain")},
+        )
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertTrue(second.json()["merged"])
+        self.assertEqual(second.json()["building_code"], "SBS")
+
+        os.environ["ANTHROPIC_API_KEY"] = "test-key-not-sent"
+        extraction_client = SimpleNamespace(
+            messages=SimpleNamespace(
+                create=AsyncMock(
+                    return_value=SimpleNamespace(
+                        content=[SimpleNamespace(
+                            type="text",
+                            text=json.dumps({
+                                "object_name": "Town Hall",
+                                "building_code": "DIFF",
+                                "street_name": "Marktplatz",
+                                "house_number": "1",
+                                "matched_building_uid": first_uid,
+                            }),
+                        )]
+                    )
+                )
+            )
+        )
+        with patch.object(module, "AsyncAnthropic", return_value=extraction_client):
+            extracted = self.client.post(
+                "/api/extract",
+                data={"provider": "anthropic"},
+                files={"file": ("town-hall.txt", b"Town hall data", "text/plain")},
+            )
+        self.assertEqual(extracted.status_code, 200, extracted.text)
+        self.assertEqual(extracted.json()["building_code"], "SBS")
+        self.assertTrue(extracted.json()["building_code_existing"])
+        self.assertEqual(extracted.json()["matched_building_uid"], first_uid)
+        self.assertTrue(extracted.json()["building_match"]["exact_address_match"])
+        extraction_prompt = extraction_client.messages.create.call_args.kwargs["messages"][0]["content"]
+        self.assertIn(first_uid, extraction_prompt)
+
+        with patch.object(
+            module,
+            "geocode_coburg_address",
+            return_value={"latitude": 50.258, "longitude": 10.964},
+        ):
+            address = self.client.post(
+                "/api/address/validate",
+                data={"street_name": "Marktplatz", "house_number": "1"},
+            )
+        self.assertEqual(address.status_code, 200, address.text)
+        self.assertEqual(address.json()["building_code"], "SBS")
+        self.assertTrue(address.json()["building_code_existing"])
+        self.assertEqual(address.json()["matched_building_uid"], first_uid)
+
+        duplicate = self.client.post(
+            "/api/buildings",
+            data={
+                "street_name": "Bahnhofstraße",
+                "house_number": "3",
+                "building_code": "SBS",
+            },
+            files={"file": ("station.txt", b"Station", "text/plain")},
+        )
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual(duplicate.json()["detail"]["code"], "duplicate-building-code")
 
     def test_same_address_reuses_uid_and_requires_conflict_review(self) -> None:
         first = self.client.post(
@@ -405,7 +590,7 @@ class BuildingWorkflowTests(unittest.TestCase):
             module.initialize_database()
             with module.database() as connection:
                 building = connection.execute(
-                    "SELECT uid, street_name, house_number, address_key FROM buildings"
+                    "SELECT uid, building_code, street_name, house_number, address_key FROM buildings"
                 ).fetchone()
                 asset_columns = {
                     row["name"] for row in connection.execute("PRAGMA table_info(building_assets)")
@@ -418,6 +603,7 @@ class BuildingWorkflowTests(unittest.TestCase):
                 ).fetchone()
             self.assertEqual((building["street_name"], building["house_number"]), ("Marktplatz", "10a"))
             self.assertTrue(building["uid"])
+            self.assertRegex(building["building_code"], r"^[A-Z]{3,8}$")
             self.assertTrue(building["address_key"])
             self.assertIn("document_id", asset_columns)
             self.assertIn("source_document_id", twin_columns)
@@ -564,6 +750,74 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertIn("generator", pages[0]["content"].casefold())
         self.assertTrue(pages[0]["used_ocr"])
         self.assertFalse(any("Tesseract OCR" in warning for warning in warnings))
+
+    def test_image_backed_pdf_is_read_visually_by_selected_ai_provider(self) -> None:
+        source = pymupdf.open()
+        source_page = source.new_page(width=800, height=1_000)
+        source_page.insert_text((35, 100), "Building report: next inspection March 2027", fontsize=28)
+        image_bytes = source_page.get_pixmap(dpi=100).tobytes("png")
+        scanned = pymupdf.open()
+        page = scanned.new_page(width=800, height=1_000)
+        page.insert_image(page.rect, stream=image_bytes)
+        page.insert_text((20, 25), "bad embedded text layer " * 3, color=(1, 1, 1))
+        pdf_bytes = scanned.tobytes()
+        extraction = {
+            "object_name": "Building report",
+            "fields": {"Inspection": "March 2027"},
+            "maintenance_findings": [],
+        }
+
+        os.environ["ANTHROPIC_API_KEY"] = "test-key-not-sent"
+        anthropic_client = SimpleNamespace(
+            messages=SimpleNamespace(
+                create=AsyncMock(
+                    return_value=SimpleNamespace(
+                        content=[SimpleNamespace(type="text", text=json.dumps(extraction))]
+                    )
+                )
+            )
+        )
+        with patch.object(module, "AsyncAnthropic", return_value=anthropic_client):
+            response = self.client.post(
+                "/api/extract",
+                data={"provider": "anthropic", "model": "claude-sonnet-5-5"},
+                files={"file": ("scanned-report.pdf", pdf_bytes, "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["extraction_method"], "vision")
+        anthropic_blocks = anthropic_client.messages.create.call_args.kwargs["messages"][0]["content"]
+        self.assertTrue(any(block["type"] == "image" for block in anthropic_blocks))
+        anthropic_prompt = next(block["text"] for block in anthropic_blocks if block["type"] == "text")
+        self.assertIn("Do not rely on or reproduce any hidden", anthropic_prompt)
+        self.assertNotIn("bad embedded text layer", anthropic_prompt)
+
+        os.environ["OPENAI_API_KEY"] = "test-key-not-sent"
+        openai_client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=AsyncMock(
+                        return_value=SimpleNamespace(
+                            choices=[SimpleNamespace(
+                                message=SimpleNamespace(content=json.dumps(extraction))
+                            )]
+                        )
+                    )
+                )
+            )
+        )
+        with patch.object(module, "AsyncOpenAI", return_value=openai_client):
+            response = self.client.post(
+                "/api/extract",
+                data={"provider": "openai", "model": "gpt-4.1-mini"},
+                files={"file": ("scanned-report.pdf", pdf_bytes, "application/pdf")},
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["extraction_method"], "vision")
+        openai_blocks = openai_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        self.assertTrue(any(block["type"] == "image_url" for block in openai_blocks))
+        openai_prompt = openai_blocks[0]["text"]
+        self.assertIn("attached PDF page images directly", openai_prompt)
+        self.assertNotIn("bad embedded text layer", openai_prompt)
 
     def test_agent_database_context_marks_records_beyond_limit_as_truncated(self) -> None:
         with module.database() as connection:
