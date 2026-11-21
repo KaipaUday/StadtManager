@@ -53,14 +53,10 @@ class SupportedTypesTests(unittest.TestCase):
         self.assertEqual(script_extensions, set(ff.SUPPORTED_EXTENSIONS))
 
         page = (public / "index.html").read_text(encoding="utf-8")
-<<<<<<< HEAD
         accept_lists = re.findall(
             r'<input id="(?:file-input|folder-input)"[^>]*accept="([^"]+)"',
             page,
         )
-=======
-        accept_lists = re.findall(r'accept="([^"]+)"', page)
->>>>>>> origin/master
         self.assertEqual(len(accept_lists), 2)
         for accept in accept_lists:
             self.assertEqual(set(accept.split(",")), set(ff.SUPPORTED_EXTENSIONS))

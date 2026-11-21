@@ -18,6 +18,15 @@ class CalendarEventTests(unittest.TestCase):
         module.DB_PATH = Path(self.database_directory.name) / "test.sqlite3"
         module.initialize_database()
         self.client = TestClient(module.app)
+        setup = self.client.post(
+            "/api/auth/setup",
+            json={
+                "username": "city.admin",
+                "display_name": "City Administrator",
+                "password": "calendar-test-password",
+            },
+        )
+        self.assertEqual(setup.status_code, 200, setup.text)
 
     def tearDown(self) -> None:
         self.client.close()
@@ -68,6 +77,39 @@ class CalendarEventTests(unittest.TestCase):
         ]:
             response = self.client.post("/api/calendar/events", json=payload)
             self.assertEqual(response.status_code, 422, payload)
+
+    def test_employee_can_view_but_not_modify_events(self) -> None:
+        created = self.client.post("/api/calendar/events", json={
+            "title": "Team meeting",
+            "event_date": "2027-01-15",
+        })
+        self.assertEqual(created.status_code, 201, created.text)
+        event_id = created.json()["id"]
+
+        user = self.client.post("/api/admin/users", json={
+            "display_name": "Employee",
+            "username": "employee.one",
+            "password": "employee-test-password",
+            "role": "employee",
+            "building_ids": [],
+        })
+        self.assertEqual(user.status_code, 200, user.text)
+        self.client.post("/api/auth/logout")
+        login = self.client.post("/api/auth/login", json={
+            "username": "employee.one",
+            "password": "employee-test-password",
+        })
+        self.assertEqual(login.status_code, 200, login.text)
+
+        self.assertEqual(self.client.get("/api/calendar/events").status_code, 200)
+        self.assertEqual(
+            self.client.post("/api/calendar/events", json={
+                "title": "Unauthorized edit",
+                "event_date": "2027-01-16",
+            }).status_code,
+            403,
+        )
+        self.assertEqual(self.client.delete(f"/api/calendar/events/{event_id}").status_code, 403)
 
 
 if __name__ == "__main__":

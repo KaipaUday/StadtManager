@@ -2,15 +2,21 @@
 
 ## Run locally
 
-<<<<<<< HEAD
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-=======
+```
+
+On macOS or Linux, create and activate the environment with:
+
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
->>>>>>> origin/master
+```
+
+Then install dependencies and start the server:
+
+```text
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m uvicorn app:app --app-dir Site --reload
@@ -22,7 +28,6 @@ supports individual files or whole folders with 57 file types (see
 Supported files are processed one at a time. Review extracted building details,
 add categories such as heating system, and accept each record before it is saved.
 
-<<<<<<< HEAD
 On the first visit, create the City Administrator account. Use a unique
 username and a password of at least 12 characters. The City Administrator can
 create employee accounts, assign buildings, and change an employee's role to
@@ -34,6 +39,7 @@ City Administrators manage accounts from the dedicated Users and building access
 workspace page. Select your profile at the bottom of the sidebar to open Profile
 settings or sign out. Profile settings support contact and job details, an
 optional profile photo, and changing your password.
+The calendar combines maintenance due dates with shared team appointments.
 For local development, keep the server bound to localhost. When serving behind
 HTTPS, set `STADTMANAGER_COOKIE_SECURE=1` in the server environment.
 
@@ -46,8 +52,6 @@ directly through the environment instead:
 .\.venv\Scripts\python.exe -m uvicorn app:app --app-dir Site --reload
 ```
 
-=======
->>>>>>> origin/master
 ## Supported file types
 
 Every listed type can be uploaded and is stored unchanged in SQLite. Where the

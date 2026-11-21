@@ -447,7 +447,6 @@ body.dark .twin-room-card, body.dark .twin-room-fields input { border-color: #30
 body.dark .twin-room-heading { color: #dce6de; }
 body.dark .twin-room-heading small, body.dark .twin-room-fields label { color: #a4b0a7; }
 
-<<<<<<< HEAD
 .auth-screen { display: grid; min-height: 100vh; place-items: center; padding: 24px; background: var(--page); }
 .auth-screen[hidden] { display: none; }
 .auth-card { width: min(420px, 100%); padding: 30px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
@@ -551,7 +550,6 @@ body.dark .password-change-fields legend { color: #dce6de; }
   .profile-fields { grid-template-columns: 1fr; }
   .profile-settings-page { padding: 16px; }
 }
-=======
 /* ---------- Calendar ---------- */
 .calendar-section { margin-top: 20px; padding: 20px; border: 1px solid #e8ebe5; border-radius: 11px; background: var(--surface); box-shadow: var(--shadow); scroll-margin-top: 80px; }
 .calendar-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 16px 0 12px; }
@@ -605,4 +603,3 @@ body.dark .calendar-day:hover { border-color: #3f5a49; }
 body.dark .calendar-chip.maintenance { color: #f0b5ad; background: #4a2a26; }
 body.dark .calendar-chip.suggested { color: #ecd09f; background: #44361f; }
 body.dark .calendar-chip.event { color: #b4d4f2; background: #23384c; }
->>>>>>> origin/master

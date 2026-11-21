@@ -45,21 +45,18 @@ const state = {
   buildingCodeSource: "",
   locationPickedManually: false,
   pickedLocationMarker: null,
+  calendar: (() => {
+    const now = new Date();
+    const selected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    return { year: now.getFullYear(), monthIndex: now.getMonth(), selected, events: [] };
+  })(),
   language: "en",
-<<<<<<< HEAD
   user: null,
   adminUsers: [],
   authMode: "login",
   profile: null,
   pendingProfileImage: null,
   profileImageRemoved: false,
-=======
-  calendar: (() => {
-    const now = new Date();
-    const selected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    return { year: now.getFullYear(), monthIndex: now.getMonth(), selected, events: [] };
-  })(),
->>>>>>> origin/master
 };
 sendButton.disabled = true;
 
@@ -179,8 +176,6 @@ const translations = {
     twinSource: "PDF source document",
     generateTwin: "Generate 3D draft",
     saveTwin: "Save reviewed model",
-<<<<<<< HEAD
-=======
     calendar: "Calendar",
     calendarKicker: "SCHEDULE",
     calendarTitle: "Maintenance calendar",
@@ -210,7 +205,6 @@ const translations = {
     eventSaveError: "Could not save the appointment.",
     eventDeleteError: "Could not delete the appointment.",
     calendarLoadError: "Could not load the calendar.",
->>>>>>> origin/master
     footerTagline: "A clearer view of your city",
     footerBuilt: "Built for thoughtful decisions.",
   },
@@ -309,8 +303,6 @@ const translations = {
     twinSource: "PDF-Quelldokument",
     generateTwin: "3D-Entwurf erstellen",
     saveTwin: "Geprüftes Modell speichern",
-<<<<<<< HEAD
-=======
     calendar: "Kalender",
     calendarKicker: "TERMINE",
     calendarTitle: "Wartungskalender",
@@ -340,7 +332,6 @@ const translations = {
     eventSaveError: "Der Termin konnte nicht gespeichert werden.",
     eventDeleteError: "Der Termin konnte nicht gelöscht werden.",
     calendarLoadError: "Der Kalender konnte nicht geladen werden.",
->>>>>>> origin/master
     footerTagline: "Ihre Stadt im klaren Überblick",
     footerBuilt: "Für fundierte Entscheidungen entwickelt.",
   },
@@ -373,13 +364,10 @@ function applyLanguage(language) {
     "aria-label",
     language === "en" ? "Zur deutschen Oberfläche wechseln" : "Switch to English interface",
   );
-<<<<<<< HEAD
   if (state.user) {
     document.querySelector("#profile-name").textContent = state.user.display_name;
     document.querySelector("#profile-role").textContent = roleLabel(state.user.role);
   }
-=======
->>>>>>> origin/master
   if (state.currentImport) {
     document.querySelector("#preview-kind").textContent = previewKindLabel(
       state.currentExtraction?.kind || fileExtension(state.currentImport.name).toUpperCase(),
@@ -387,7 +375,7 @@ function applyLanguage(language) {
     );
   }
   renderMaintenanceOverview();
-<<<<<<< HEAD
+  renderCalendar();
 }
 
 function roleLabel(role) {
@@ -433,9 +421,6 @@ function renderProfileImage(imageData, name, profileOnly = false) {
     if (imageData) image.src = imageData;
     else image.removeAttribute("src");
   }
-=======
-  renderCalendar();
->>>>>>> origin/master
 }
 
 function showToast(message) {
@@ -1277,10 +1262,7 @@ async function renderTwin(twin, buildingId = state.activeBuildingId) {
         const input = document.createElement("input");
         input.type = type;
         input.value = room[field];
-<<<<<<< HEAD
         input.disabled = state.user?.role === "employee";
-=======
->>>>>>> origin/master
         input.dataset.twinFloor = floorIndex;
         input.dataset.twinRoom = roomIndex;
         input.dataset.twinField = field;
@@ -1455,10 +1437,7 @@ function renderMaintenanceCards(container, items, emptyMessage) {
       addAction("dismiss", "Dismiss");
     }
     card.append(actions);
-<<<<<<< HEAD
     if (state.user?.role === "employee") actions.hidden = true;
-=======
->>>>>>> origin/master
     container.append(card);
   }
 }
@@ -1484,10 +1463,7 @@ async function loadMaintenance() {
     if (!response.ok) throw new Error(result.detail || "Could not load maintenance alerts.");
     state.maintenance = result.items || [];
     renderMaintenanceOverview();
-<<<<<<< HEAD
-=======
     renderCalendar();
->>>>>>> origin/master
   } catch (error) {
     showToast(error.message || "Could not load maintenance alerts.");
   }
@@ -1524,7 +1500,6 @@ async function updateMaintenanceItem(itemId, action) {
   }
 }
 
-<<<<<<< HEAD
 function addBuildingEditField(name = "", value = "") {
   const row = document.createElement("div");
   row.className = "building-edit-row";
@@ -1548,8 +1523,6 @@ function addBuildingEditField(name = "", value = "") {
   document.querySelector("#building-edit-fields").append(row);
 }
 
-=======
->>>>>>> origin/master
 async function openBuildingDetails(buildingId) {
   const building = state.buildings.find((record) => record.id === buildingId);
   if (!building) return;
@@ -1561,7 +1534,6 @@ async function openBuildingDetails(buildingId) {
   document.querySelector("#building-detail-address").textContent = building.address || "No address recorded";
   document.querySelector("#building-detail-uid").textContent =
     `${translations[state.language].buildingCode}: ${building.building_code} · ${translations[state.language].systemUid}: ${building.uid}`;
-<<<<<<< HEAD
   const propertyList = document.querySelector("#building-property-list");
   const properties = Object.entries(building.fields || {});
   const editable = state.user?.role !== "employee";
@@ -1586,8 +1558,6 @@ async function openBuildingDetails(buildingId) {
       return item;
     }));
   }
-=======
->>>>>>> origin/master
   document.querySelector("#building-detail-warning").hidden = true;
   document.querySelector("#building-image-gallery").textContent = "Loading PDF images…";
   document.querySelector("#building-image-count").textContent = "";
@@ -1601,11 +1571,8 @@ async function openBuildingDetails(buildingId) {
   document.querySelector("#save-twin").hidden = true;
   const generateButton = document.querySelector("#generate-twin");
   generateButton.disabled = true;
-<<<<<<< HEAD
   generateButton.hidden = state.user?.role === "employee";
   document.querySelector("#save-twin").hidden = true;
-=======
->>>>>>> origin/master
   generateButton.textContent = "Loading PDF files…";
   if (!dialog.open) dialog.showModal();
   clearTwinViewer();
@@ -1817,10 +1784,7 @@ async function loadBuildings() {
     state.processedCount = state.buildings.length;
     renderFiles();
     renderBuildings();
-<<<<<<< HEAD
     if (state.user?.role === "city_administrator" && state.adminUsers.length) renderAdminUsers();
-=======
->>>>>>> origin/master
   } catch (error) {
     showToast(error.message || "Could not load saved buildings.");
   }
@@ -1973,7 +1937,6 @@ async function loadModels() {
   }
 }
 
-<<<<<<< HEAD
 function populateBuildingSelect(select, selectedIds = []) {
   const selected = new Set(selectedIds.map(Number));
   select.replaceChildren(...state.buildings.map((building) => {
@@ -2169,6 +2132,7 @@ async function startAuthenticatedApp(user) {
   document.querySelector("#users-nav").hidden = !isCityAdmin;
   document.querySelector("#clear-data").hidden = !isCityAdmin;
   document.querySelector("#dropzone").hidden = !isWriter;
+  document.querySelector("#calendar-event-form").hidden = !isWriter;
   document.querySelector("#review-panel").hidden = true;
   document.querySelector(".files-panel").hidden = !isWriter;
   document.querySelector(".assistant-panel").classList.toggle("assistant-only", !isWriter);
@@ -2176,6 +2140,7 @@ async function startAuthenticatedApp(user) {
   await loadProfile();
   await loadBuildings();
   await loadMaintenance();
+  await loadCalendarEvents();
   if (isWriter) await loadCategories();
   loadModels();
   initializeCityMap();
@@ -2216,8 +2181,6 @@ async function initializeAuthentication() {
   }
 }
 
-=======
->>>>>>> origin/master
 fileInput.addEventListener("change", () => queueFiles([...fileInput.files]));
 folderInput.addEventListener("change", () => queueFiles([...folderInput.files]));
 document.querySelector("#browse-files").addEventListener("click", () => fileInput.click());
@@ -2359,7 +2322,6 @@ if (localStorage.getItem("stadtmanager-theme") === "dark") document.body.classLi
 document.querySelector("#language-toggle").addEventListener("click", () => {
   applyLanguage(state.language === "en" ? "de" : "en");
 });
-<<<<<<< HEAD
 document.querySelectorAll(".nav-item").forEach((link) => {
   link.addEventListener("click", (event) => {
     const page = link.dataset.workspacePage;
@@ -2495,8 +2457,6 @@ document.querySelector("#profile-form").addEventListener("submit", async (event)
     button.disabled = false;
   }
 });
-=======
->>>>>>> origin/master
 document.querySelector("#clear-data").addEventListener("click", async () => {
   const message = state.language === "de"
     ? "Alle gespeicherten Gebäude, Dateien, Wartungsmeldungen und 3D-Modelle unwiderruflich löschen?"
@@ -2513,10 +2473,7 @@ document.querySelector("#clear-data").addEventListener("click", async () => {
     renderFiles();
     renderBuildings();
     renderMaintenanceOverview();
-<<<<<<< HEAD
-=======
     renderCalendar();
->>>>>>> origin/master
     showToast(state.language === "de"
       ? `${result.deleted_buildings} Gebäude und alle zugehörigen Daten gelöscht.`
       : `${result.deleted_buildings} buildings and all related data deleted.`);
@@ -2524,7 +2481,6 @@ document.querySelector("#clear-data").addEventListener("click", async () => {
     showToast(error.message || "Could not clear saved data.");
   }
 });
-<<<<<<< HEAD
 document.querySelector("#sign-out").addEventListener("click", async () => {
   try {
     const response = await fetch("/api/auth/logout", { method: "POST" });
@@ -2587,8 +2543,47 @@ document.querySelector("#auth-form").addEventListener("submit", async (event) =>
   document.querySelector("#auth-message").textContent = "";
   try {
     const response = await fetch(isSetup ? "/api/auth/setup" : "/api/auth/login", {
-=======
-
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "Authentication failed.");
+    await startAuthenticatedApp(result.user);
+  } catch (error) {
+    document.querySelector("#auth-message").textContent = error.message || "Authentication failed.";
+  } finally {
+    submit.disabled = false;
+  }
+});
+document.querySelector("#admin-user-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        display_name: document.querySelector("#new-user-name").value.trim(),
+        username: document.querySelector("#new-user-username").value.trim(),
+        password: document.querySelector("#new-user-password").value,
+        role: document.querySelector("#new-user-role").value,
+        building_ids: [...document.querySelector("#new-user-buildings").selectedOptions]
+          .map((option) => Number(option.value)),
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "Could not create user account.");
+    event.currentTarget.reset();
+    await loadAdminUsers();
+    showToast(`Account created for ${result.display_name}.`);
+  } catch (error) {
+    showToast(error.message || "Could not create user account.");
+  } finally {
+    button.disabled = false;
+  }
+});
 
 // ---------- Calendar ----------
 
@@ -2797,12 +2792,14 @@ function renderCalendarDay(entriesByDate = calendarEntriesByDate()) {
         note.textContent = entry.note;
         item.append(note);
       }
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "maintenance-action";
-      remove.textContent = calendarText("deleteEvent");
-      remove.addEventListener("click", () => deleteCalendarEvent(entry.id));
-      item.append(remove);
+      if (state.user?.role !== "employee") {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "maintenance-action";
+        remove.textContent = calendarText("deleteEvent");
+        remove.addEventListener("click", () => deleteCalendarEvent(entry.id));
+        item.append(remove);
+      }
     } else {
       const link = document.createElement("button");
       link.type = "button";
@@ -2870,50 +2867,11 @@ async function addCalendarEvent(event) {
   if (!payload.title || !payload.event_date) return;
   try {
     const response = await fetch("/api/calendar/events", {
->>>>>>> origin/master
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     const result = await response.json();
-<<<<<<< HEAD
-    if (!response.ok) throw new Error(result.detail || "Authentication failed.");
-    await startAuthenticatedApp(result.user);
-  } catch (error) {
-    document.querySelector("#auth-message").textContent = error.message || "Authentication failed.";
-  } finally {
-    submit.disabled = false;
-  }
-});
-document.querySelector("#admin-user-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = event.currentTarget.querySelector('button[type="submit"]');
-  button.disabled = true;
-  try {
-    const response = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        display_name: document.querySelector("#new-user-name").value.trim(),
-        username: document.querySelector("#new-user-username").value.trim(),
-        password: document.querySelector("#new-user-password").value,
-        role: document.querySelector("#new-user-role").value,
-        building_ids: [...document.querySelector("#new-user-buildings").selectedOptions]
-          .map((option) => Number(option.value)),
-      }),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || "Could not create user account.");
-    event.currentTarget.reset();
-    await loadAdminUsers();
-    showToast(`Account created for ${result.display_name}.`);
-  } catch (error) {
-    showToast(error.message || "Could not create user account.");
-  } finally {
-    button.disabled = false;
-  }
-});
-=======
     if (!response.ok) {
       const detail = Array.isArray(result.detail) ? result.detail.map((item) => item.msg).join(" ") : result.detail;
       throw new Error(detail || calendarText("eventSaveError"));
@@ -2962,7 +2920,6 @@ calendarElements.yearSelect.addEventListener("change", () => {
   showCalendarMonth(Number(calendarElements.yearSelect.value), state.calendar.monthIndex);
 });
 calendarElements.form.addEventListener("submit", addCalendarEvent);
->>>>>>> origin/master
 
 const savedLanguage = localStorage.getItem("stadtmanager-language");
 const browserLanguage = (navigator.language || "en").toLowerCase().startsWith("de") ? "de" : "en";
@@ -2980,13 +2937,4 @@ fetch("/api/health")
     document.querySelector(".status-dot").classList.add("offline");
   });
 
-<<<<<<< HEAD
 initializeAuthentication();
-=======
-loadModels();
-loadCategories();
-loadBuildings();
-loadMaintenance();
-loadCalendarEvents();
-initializeCityMap();
->>>>>>> origin/master
