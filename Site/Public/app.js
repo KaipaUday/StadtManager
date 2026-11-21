@@ -42,6 +42,7 @@ const state = {
   twinDraftSourceDocumentIds: [],
   threePromise: null,
   twinViewer: null,
+  campusTwin: null,
   addressVerified: false,
   addressRequestId: 0,
   addressLookupTimer: null,
@@ -1300,7 +1301,42 @@ function selectMapLocation(longitude, latitude, label = "") {
   document.querySelector("#review-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// --- 3D-Campusmodell Plattenäcker (three.js, frei drehbar) ---
+function isPlattenaeckerCampus(building) {
+  const text = `${building?.address || ""} ${building?.full_address || ""} ${building?.street_name || ""} ${building?.house_number || ""}`;
+  return /platten(ä|ae|a)cker/i.test(text) && /(^|\D)30(\D|$)/.test(text);
+}
+
+async function mountCampusModel(buildingId) {
+  const viewerElement = document.querySelector("#twin-viewer");
+  try {
+    const { mountCampusKombi } = await import("/campus3d/campus-kombi.js");
+    if (state.activeBuildingId !== buildingId || !document.querySelector("#building-detail-dialog").open) return;
+    clearTwinViewer();
+    viewerElement.textContent = "";
+    viewerElement.classList.add("campus-mode");
+    state.campusTwin = mountCampusKombi(viewerElement, { planBaseUrl: "/campus3d/plans/" });
+    // Für spätere Features: Auswahl im Modell (Trakt, Stockwerk, Objekt, Dach)
+    state.campusTwin.on("select", (selection) => {
+      document.dispatchEvent(new CustomEvent("stadtmanager:campus-select", { detail: { buildingId, ...selection } }));
+    });
+    document.querySelector("#twin-scale-note").textContent =
+      "Campusmodell: Umrisse aus OpenStreetMap, Trakte und Stockwerke nach dem Gebäudeplan der Schule, Grundrisse aus den Bauplänen 1966. Geschätzte Angaben sind im Modell gekennzeichnet.";
+  } catch (error) {
+    viewerElement.textContent = "Das 3D-Campusmodell konnte nicht geladen werden.";
+    console.error(error);
+  }
+}
+
+function clearCampusModel() {
+  if (!state.campusTwin) return;
+  state.campusTwin.dispose();
+  state.campusTwin = null;
+  document.querySelector("#twin-viewer")?.classList.remove("campus-mode");
+}
+
 function clearTwinViewer() {
+  clearCampusModel();
   const viewer = state.twinViewer;
   if (!viewer) return;
   viewer.resizeObserver?.disconnect();
@@ -1951,7 +1987,8 @@ async function openBuildingDetails(buildingId) {
       warning.hidden = false;
     }
 
-    if (twinResult.twin) await renderTwin(twinResult.twin, buildingId);
+    if (isPlattenaeckerCampus(building)) await mountCampusModel(buildingId);
+    else if (twinResult.twin) await renderTwin(twinResult.twin, buildingId);
     else {
       document.querySelector("#twin-viewer").textContent = "No 3D model saved yet. Generate a draft from this PDF floor plan.";
       document.querySelector("#twin-room-list").replaceChildren();
