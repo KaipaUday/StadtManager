@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f6f2">
+    <title>StadtManager — City data, made clear</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css?v=20261121-profile1">
+  </head>
+  <body>
+    <main class="auth-screen" id="auth-screen">
+      <section class="auth-card" aria-labelledby="auth-title">
+        <a class="brand auth-brand" href="/" aria-label="StadtManager home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><path d="M5 25V13l7-5v17m0-10 7-5v15m0-8 8-5v13M3 25h26" /></svg>
+          </span>
+          <span>stadt<span class="brand-light">manager</span></span>
+        </a>
+        <h1 id="auth-title">Sign in</h1>
+        <p id="auth-copy">Sign in to view your assigned buildings.</p>
+        <form id="auth-form">
+          <label class="auth-field" id="auth-display-wrap" hidden>
+            <span>Your name</span>
+            <input id="auth-display-name" maxlength="100" autocomplete="name">
+          </label>
+          <label class="auth-field">
+            <span>Username</span>
+            <input id="auth-username" required minlength="3" maxlength="80" autocomplete="username">
+          </label>
+          <label class="auth-field">
+            <span>Password</span>
+            <input id="auth-password" type="password" required minlength="12" maxlength="128" autocomplete="current-password">
+          </label>
+          <button class="primary-button auth-submit" id="auth-submit" type="submit">Sign in</button>
+          <p class="auth-message" id="auth-message" role="status"></p>
+        </form>
+      </section>
+    </main>
+    <div class="app-shell" id="app-shell" hidden>
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="StadtManager home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><path d="M5 25V13l7-5v17m0-10 7-5v15m0-8 8-5v13M3 25h26" /></svg>
+          </span>
+          <span>stadt<span class="brand-light">manager</span></span>
+        </a>
+        <div class="workspace-label">WORKSPACE</div>
+        <nav class="main-nav" aria-label="Main navigation">
+          <a class="nav-item active" href="#overview">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+            <span data-i18n="overview">Overview</span>
+          </a>
+          <a class="nav-item" href="#files">
+            <svg viewBox="0 0 24 24"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10z"/><path d="M13 3v7h7M8 15h8M8 18h5"/></svg>
+            <span data-i18n="files">File workspace</span> <span class="nav-count" id="file-count">0</span>
+          </a>
+          <a class="nav-item" href="#city-map">
+            <svg viewBox="0 0 24 24"><path d="m3 7 6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13m6-10v13"/></svg>
+            <span data-i18n="map">City map</span>
+          </a>
+          <a class="nav-item" href="#assistant">
+            <svg viewBox="0 0 24 24"><path d="M12 3 14.2 9.8 21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z"/><path d="m19 3 .8 2.2L22 6l-2.2.8L19 9l-.8-2.2L16 6l2.2-.8L19 3z"/></svg>
+            <span data-i18n="assistant">AI assistant</span>
+          </a>
+          <a class="nav-item" id="users-nav" href="#users" data-workspace-page="users" hidden>
+            <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Users and building access</span>
+          </a>
+        </nav>
+        <div class="sidebar-bottom">
+          <button class="profile" id="profile-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+            <span class="avatar" aria-hidden="true"><img id="profile-avatar-image" alt="" hidden><span id="profile-avatar-initials">CA</span></span>
+            <span><strong id="profile-name">City Administrator</strong><small id="profile-role">City Administration</small></span>
+            <span class="online-dot" title="Backend status"></span>
+          </button>
+          <div class="profile-menu" id="profile-menu" role="menu" hidden>
+            <button type="button" id="profile-settings-button" role="menuitem">Profile settings</button>
+            <button type="button" id="sign-out" role="menuitem">Sign out</button>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumb"><span data-i18n="workspace">Workspace</span><span class="crumb-slash">/</span><strong id="page-title" data-i18n="overview">Overview</strong></div>
+          <div class="topbar-actions">
+            <span class="backend-status"><span class="status-dot"></span><span id="backend-label" data-i18n="checking">Checking backend</span></span>
+            <button class="language-toggle" id="language-toggle" type="button" aria-label="Switch language">
+              <span id="language-en">EN</span><i></i><span id="language-de">DE</span>
+            </button>
+            <button class="clear-data-button" id="clear-data" type="button" title="Delete all saved building data" data-i18n="clear">Clear data</button>
+            <button class="icon-button" id="theme-toggle" aria-label="Toggle color theme" title="Toggle color theme">
+              <svg viewBox="0 0 24 24"><path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5a8.5 8.5 0 1 0 12 12z"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="content">
+          <div class="workspace-page" id="overview">
+          <section class="stat-grid" aria-label="Workspace summary">
+            <article class="stat-card">
+              <div class="stat-top"><span class="stat-icon mint"><svg viewBox="0 0 24 24"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10z"/><path d="M13 3v7h7"/></svg></span><span class="stat-label" data-i18n="saved">SAVED BUILDINGS</span></div>
+              <div class="stat-value" id="processed-count">0</div>
+              <div class="stat-foot" data-i18n="savedFoot">Accepted records in database</div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top"><span class="stat-icon lavender"><svg viewBox="0 0 24 24"><path d="M12 3 14.2 9.8 21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z"/></svg></span><span class="stat-label">AI AGENT</span></div>
+              <div class="stat-value stat-word" id="agent-state">Checking</div>
+              <div class="stat-foot" id="agent-foot">Verifying provider access</div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-top"><span class="stat-icon peach"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h17"/><path d="m7 15 4-4 3 2 6-7"/></svg></span><span class="stat-label">SUPPORTED DATA</span></div>
+              <div class="stat-value stat-word">57 formats</div>
+              <div class="stat-foot" data-i18n="formatsFoot">PDF, Office, images, CAD, GAEB, e-mail, archives</div>
+            </article>
+          </section>
+
+          <section class="maintenance-overview" aria-labelledby="maintenance-title">
+            <div class="maintenance-overview-heading">
+              <div>
+                <div class="section-kicker" data-i18n="buildingHealth">BUILDING HEALTH</div>
+                <h2 id="maintenance-title" data-i18n="maintenance">Maintenance &amp; alerts</h2>
+                <p data-i18n="maintenanceCopy">AI findings stay suggestions until you confirm them. Track upcoming repairs here.</p>
+              </div>
+              <span class="maintenance-summary" id="maintenance-summary">No open items</span>
+            </div>
+            <div id="maintenance-list" class="maintenance-list">
+              <div class="maintenance-empty" data-i18n="emptyMaintenance">No repair suggestions yet. Upload a building report to look for repairs.</div>
+            </div>
+          </section>
+
+          <section class="work-grid">
+            <article class="panel files-panel" id="files">
+              <div class="panel-heading">
+                <div>
+                  <div class="section-kicker" data-i18n="yourData">YOUR DATA</div>
+                  <h2 data-i18n="fileWorkspace">File workspace</h2>
+                  <p data-i18n="fileCopy">Drop in a file to preview and prepare it for analysis.</p>
+                </div>
+                <span class="panel-step">01 <span>/ 02</span></span>
+              </div>
+              <div class="dropzone" id="dropzone">
+                <input id="file-input" type="file" multiple accept=".7z,.bpn,.cdr,.csv,.d81,.d83,.d84,.db,.doc,.docx,.dos,.dot,.dwg,.dxf,.gan,.gif,.gsm,.htm,.html,.info,.ini,.jpeg,.jpg,.json,.lck,.lnk,.lwi,.md,.mov,.msg,.p81,.p83,.pdf,.pla,.pln,.png,.pptx,.py,.rtf,.sample,.sgc,.shx,.tif,.tiff,.tmp,.tpl,.txt,.wbk,.x81,.x82,.x83,.x84,.xls,.xlsm,.xlsx,.xml,.zip" aria-hidden="true" tabindex="-1">
+                <input id="folder-input" type="file" webkitdirectory directory multiple accept=".7z,.bpn,.cdr,.csv,.d81,.d83,.d84,.db,.doc,.docx,.dos,.dot,.dwg,.dxf,.gan,.gif,.gsm,.htm,.html,.info,.ini,.jpeg,.jpg,.json,.lck,.lnk,.lwi,.md,.mov,.msg,.p81,.p83,.pdf,.pla,.pln,.png,.pptx,.py,.rtf,.sample,.sgc,.shx,.tif,.tiff,.tmp,.tpl,.txt,.wbk,.x81,.x82,.x83,.x84,.xls,.xlsm,.xlsx,.xml,.zip" aria-hidden="true" tabindex="-1">
+                <span class="upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v4h16v-4"/></svg></span>
+                <strong data-i18n="drop">Drop your files here</strong>
+                <span class="drop-subtitle" data-i18n="dropSubtitle">Choose individual files or import a folder</span>
+                <span class="drop-actions">
+                  <button class="browse-link" id="browse-files" type="button" data-i18n="browseFiles">Browse files</button>
+                  <span data-i18n="or">or</span>
+                  <button class="browse-link" id="browse-folder" type="button" data-i18n="browseFolder">Choose folder</button>
+                </span>
+                <span class="file-limits"><span data-i18n="fileLimits">PDF, Office, images, CAD, GAEB, e-mail, ZIP and more</span> <i></i> <span data-i18n="fileSize">Up to 100 MB each</span></span>
+              </div>
+              <div class="file-list-header"><span data-i18n="recentFiles">RECENT FILES</span><span id="list-count">0 files</span></div>
+              <div class="file-list" id="file-list">
+                <div class="empty-files">
+                  <span class="empty-file-icon"><svg viewBox="0 0 24 24"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10z"/><path d="M13 3v7h7"/></svg></span>
+                  <span data-i18n="workspaceReady">Your workspace is ready</span>
+                  <small data-i18n="uploadedFilesAppear">Uploaded files will appear here.</small>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel assistant-panel" id="assistant">
+              <div class="panel-heading assistant-heading">
+                <div class="assistant-title-wrap">
+                  <span class="assistant-mark"><svg viewBox="0 0 24 24"><path d="M12 3 14.2 9.8 21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z"/></svg></span>
+                  <div><div class="section-kicker" data-i18n="aiPartner">YOUR AI PARTNER</div><h2 data-i18n="ask">Ask StadtManager</h2></div>
+                </div>
+                <div class="assistant-controls">
+                  <label class="sr-only" for="provider" data-i18n="aiProvider">AI provider</label>
+                  <select id="provider" class="provider-select" aria-label="AI provider" data-i18n-aria-label="aiProvider">
+                    <option value="anthropic">Anthropic</option>
+                    <option value="openai">OpenAI</option>
+                  </select>
+                  <label class="sr-only" for="model-select" data-i18n="availableModel">Available model</label>
+                  <select id="model-select" class="provider-select" aria-label="Available model" data-i18n-aria-label="availableModel" hidden disabled></select>
+                  <span id="key-status" class="key-status" role="status">Checking API key…</span>
+                </div>
+              </div>
+              <div class="chat-area" id="chat-area" aria-live="polite">
+                <div class="assistant-message">
+                  <span class="chat-avatar"><svg viewBox="0 0 24 24"><path d="M12 3 14.2 9.8 21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z"/></svg></span>
+                  <div class="message-content"><span class="message-name">StadtManager <span class="message-time" data-i18n="assistant">AI assistant</span></span><div class="message-bubble" data-i18n="assistantWelcome">Hi there! Upload a file and ask me to summarize it, find patterns, or help you make sense of the data.</div></div>
+                </div>
+                <div class="suggestion-label" data-i18n="tryAsking">TRY ASKING</div>
+                <div class="suggestions">
+                  <button class="suggestion" data-prompt="What kind of analysis can you do with my city data?" data-i18n="suggestionAnalysis">What can you help me analyze?</button>
+                  <button class="suggestion" data-prompt="Give me a concise summary of the files I uploaded." data-i18n="suggestionSummary">Summarize my files</button>
+                </div>
+              </div>
+              <form class="chat-form" id="chat-form">
+                <textarea id="chat-input" rows="1" maxlength="4000" placeholder="Ask a question about your data..." data-i18n-placeholder="chatPlaceholder" aria-label="Message the AI assistant" data-i18n-aria-label="chatAria"></textarea>
+                <div class="chat-form-bottom"><span class="privacy-hint"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg> <span data-i18n="privacyHint">Key stays here; saved building data and uploaded text go to the selected AI provider</span></span><button class="send-button" id="send-button" type="submit" aria-label="Send message" data-i18n-aria-label="send"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span data-i18n="send">Send</span></button></div>
+              </form>
+            </article>
+          </section>
+
+          <section class="review-panel" id="review-panel" hidden aria-labelledby="review-title">
+            <div class="review-heading">
+              <div>
+                <div class="section-kicker" data-i18n="verifyBeforeSaving">VERIFY BEFORE SAVING</div>
+                <h2 id="review-title" data-i18n="reviewBuilding">Review building data</h2>
+                <p id="review-progress" data-i18n="reviewCopy">Extracted details are suggestions. Confirm or edit them before saving.</p>
+              </div>
+              <button class="secondary-button" id="skip-file" type="button" data-i18n="skipFile">Skip this file</button>
+            </div>
+            <div class="review-grid">
+              <div class="review-form">
+                <div class="form-field">
+                  <label for="object-name"><span data-i18n="buildingName">Building name</span> <span class="optional-mark" data-i18n="optional">Optional</span></label>
+                  <input id="object-name" maxlength="200" placeholder="Optional label" data-i18n-placeholder="optionalLabel">
+                </div>
+                <div class="form-field">
+                  <label for="building-code"><span data-i18n="buildingCode">Building code</span> <span class="required-mark" data-i18n="required">Required</span></label>
+                  <input id="building-code" maxlength="8" minlength="3" pattern="[A-Za-z]{3,8}" required autocomplete="off" placeholder="e.g. SBS" data-i18n-placeholder="buildingCodePlaceholder">
+                  <small data-i18n="buildingCodeHint">AI suggestion; review or edit before saving.</small>
+                </div>
+                <div class="form-field">
+                  <label for="street-name"><span data-i18n="streetName">Street name</span> <span class="required-mark" data-i18n="required">Required</span></label>
+                  <input id="street-name" maxlength="150" required placeholder="e.g. Hauptstraße">
+                </div>
+                <div class="form-field">
+                  <label for="house-number"><span data-i18n="houseNumber">House number</span> <span class="required-mark" data-i18n="required">Required</span></label>
+                  <input id="house-number" maxlength="30" required placeholder="e.g. 12a">
+                </div>
+                <div class="form-field">
+                  <label for="full-address"><span data-i18n="fullAddress">Full address</span> <span class="optional-mark" data-i18n="optional">Optional</span></label>
+                  <input id="full-address" maxlength="300" placeholder="e.g. Plattenäcker 30, 96450 Coburg">
+                </div>
+                <div class="location-heading">
+                  <span><span data-i18n="mapCoordinates">Map coordinates</span> <span class="optional-mark" data-i18n="optional">Optional</span></span>
+                  <span class="location-actions">
+                    <button class="text-button" id="pick-location" type="button" data-i18n="pickMap">Pick on map</button>
+                  </span>
+                </div>
+                <div class="coordinate-fields">
+                  <div class="form-field"><label for="building-latitude" data-i18n="latitude">Latitude</label><input id="building-latitude" inputmode="decimal" placeholder="50.264300"></div>
+                  <div class="form-field"><label for="building-longitude" data-i18n="longitude">Longitude</label><input id="building-longitude" inputmode="decimal" placeholder="10.964400"></div>
+                </div>
+                <div class="field-list-heading">
+                  <div><strong data-i18n="buildingDetails">Building details</strong><small data-i18n="editableFields">AI-extracted fields can be edited.</small></div>
+                  <button class="secondary-button compact" id="add-field" type="button" data-i18n="addField">+ Add field</button>
+                </div>
+                <div class="review-fields" id="review-fields"></div>
+                <div id="extraction-maintenance" class="extraction-maintenance" hidden></div>
+                <div id="building-match" class="extraction-notice" role="status" hidden></div>
+                <div id="merge-review" class="merge-review" hidden></div>
+                <div class="extraction-notice" id="extraction-notice" role="status" hidden></div>
+                <div class="review-actions">
+                  <span class="review-status" id="review-status"></span>
+                  <button class="primary-button" id="accept-building" type="button" data-i18n="acceptSave">Accept &amp; save building</button>
+                </div>
+              </div>
+              <div class="document-preview">
+                <div class="document-preview-heading">
+                  <strong id="preview-filename" data-i18n="sourceDocument">Source document</strong>
+                  <span id="preview-kind"></span>
+                </div>
+                <iframe id="pdf-preview" title="Uploaded PDF preview" hidden></iframe>
+                <img id="image-preview" alt="Uploaded image preview" data-i18n-alt="uploadImagePreview" hidden>
+                <pre id="text-preview" hidden></pre>
+              </div>
+            </div>
+          </section>
+
+          <section class="map-section" id="city-map" aria-labelledby="map-title">
+            <div class="map-section-heading">
+              <div>
+                <div class="section-kicker" data-i18n="cityTwin">CITY TWIN</div>
+                <h2 id="map-title" data-i18n="mapTitle">Coburg in 3D</h2>
+                <p data-i18n="mapCopy">Click a pin to open its PDF images and 3D model. Search saved buildings by name, address, or property.</p>
+              </div>
+              <span class="map-building-count" id="building-count">0 saved buildings</span>
+            </div>
+            <div class="map-layout">
+              <div id="city-map-canvas" class="city-map" role="application" aria-label="Interactive 3D map of Coburg" data-i18n-aria-label="mapAria"></div>
+              <aside class="map-records" aria-label="Saved buildings" data-i18n-aria-label="savedBuildings">
+                <div class="map-records-heading"><strong data-i18n="savedBuildings">Saved buildings</strong><span data-i18n="database">DATABASE</span></div>
+                <input id="building-search" class="building-search" type="search" placeholder="Search buildings and properties" aria-label="Search saved buildings" data-i18n-placeholder="searchBuildings" data-i18n-aria-label="searchBuildings">
+                <div id="building-list" class="building-list">
+                  <div class="map-empty" data-i18n="noBuildings">Accepted building records will appear here.</div>
+                </div>
+              </aside>
+            </div>
+            <p class="map-attribution" data-i18n="mapAttribution">Map data © OpenStreetMap contributors · Tiles by OpenFreeMap</p>
+          </section>
+          </div>
+
+          <section class="workspace-page admin-user-panel" id="users-page" hidden aria-labelledby="admin-user-title">
+            <div class="admin-user-heading">
+              <div>
+                <div class="section-kicker">CITY ADMINISTRATION</div>
+                <h2 id="admin-user-title">Users and building access</h2>
+                <p>Create employee accounts, assign buildings, and promote employees to Building Administrator.</p>
+              </div>
+            </div>
+            <form class="admin-user-form" id="admin-user-form">
+              <label class="auth-field"><span>Full name</span><input id="new-user-name" required maxlength="100"></label>
+              <label class="auth-field"><span>Username</span><input id="new-user-username" required minlength="3" maxlength="80"></label>
+              <label class="auth-field"><span>Initial password (12+ characters)</span><input id="new-user-password" type="password" required minlength="12" maxlength="128"></label>
+              <label class="auth-field"><span>Role</span>
+                <select id="new-user-role">
+                  <option value="employee">Employee (read-only)</option>
+                  <option value="building_administrator">Building Administrator</option>
+                </select>
+              </label>
+              <label class="auth-field admin-building-field"><span>Assigned buildings</span>
+                <select id="new-user-buildings" multiple size="4" aria-label="Assigned buildings"></select>
+              </label>
+              <button class="primary-button" type="submit">Create account</button>
+            </form>
+            <div class="admin-user-list" id="admin-user-list"></div>
+          </section>
+
+          <section class="workspace-page profile-settings-page" id="profile-settings-page" hidden aria-labelledby="profile-settings-title">
+            <div class="profile-settings-heading">
+              <div>
+                <div class="section-kicker">YOUR ACCOUNT</div>
+                <h2 id="profile-settings-title">Profile settings</h2>
+                <p>Manage your personal information, profile photo, and password.</p>
+              </div>
+              <button class="secondary-button" id="profile-back" type="button">Back to overview</button>
+            </div>
+            <form id="profile-form" class="profile-form">
+              <div class="profile-image-editor">
+                <div class="profile-image-preview" aria-hidden="true">
+                  <img id="profile-image-preview" alt="" hidden>
+                  <span id="profile-image-initials">CA</span>
+                </div>
+                <div class="profile-image-actions">
+                  <strong>Profile photo</strong>
+                  <small>PNG, JPEG, or WebP up to 12 MB. Photos are optimized automatically.</small>
+                  <input id="profile-image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                  <button class="secondary-button" id="choose-profile-image" type="button">Choose photo</button>
+                  <button class="text-button" id="remove-profile-image" type="button">Remove photo</button>
+                  <span id="profile-image-status" class="review-status" role="status"></span>
+                </div>
+              </div>
+              <div class="profile-fields">
+                <label class="auth-field"><span>Full name</span><input id="profile-display-name" required maxlength="100" autocomplete="name"></label>
+                <label class="auth-field"><span>Email</span><input id="profile-email" type="email" maxlength="254" autocomplete="email"></label>
+                <label class="auth-field"><span>Phone</span><input id="profile-phone" type="tel" maxlength="50" autocomplete="tel"></label>
+                <label class="auth-field"><span>Job title</span><input id="profile-job-title" maxlength="100" autocomplete="organization-title"></label>
+                <label class="auth-field"><span>Department</span><input id="profile-department" maxlength="100" autocomplete="organization"></label>
+                <label class="auth-field"><span>Username</span><input id="profile-username" readonly></label>
+                <label class="auth-field"><span>Account role</span><input id="profile-role-value" readonly></label>
+              </div>
+              <fieldset class="password-change-fields">
+                <legend>Change password</legend>
+                <p>Leave these fields blank to keep your current password.</p>
+                <label class="auth-field"><span>Current password</span><input id="profile-current-password" type="password" autocomplete="current-password"></label>
+                <label class="auth-field"><span>New password (12+ characters)</span><input id="profile-new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>
+                <label class="auth-field"><span>Confirm new password</span><input id="profile-confirm-password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label>
+              </fieldset>
+              <div class="profile-form-actions">
+                <span id="profile-save-status" class="review-status" role="status"></span>
+                <button class="primary-button" id="profile-save" type="submit">Save profile</button>
+              </div>
+            </form>
+          </section>
+
+          <dialog id="building-detail-dialog" class="building-detail-dialog" aria-labelledby="building-detail-title">
+            <div class="building-detail-shell">
+              <header class="building-detail-heading">
+                <div>
+                  <div class="section-kicker" data-i18n="buildingTwin">BUILDING DIGITAL TWIN</div>
+                  <h2 id="building-detail-title" data-i18n="building">Building</h2>
+                  <p id="building-detail-address"></p>
+                  <small id="building-detail-uid"></small>
+                </div>
+                <button id="building-detail-close" class="secondary-button" type="button" aria-label="Close building details" data-i18n-aria-label="close" data-i18n="close">Close</button>
+              </header>
+              <div id="building-detail-warning" class="extraction-notice" hidden></div>
+              <section class="building-detail-subsection">
+                <div class="detail-section-heading"><h3>Building data</h3></div>
+                <form id="building-edit-form" class="building-edit-form" hidden>
+                  <label class="auth-field"><span>Building name</span><input id="building-edit-name" maxlength="200" required></label>
+                  <div id="building-edit-fields" class="building-edit-fields"></div>
+                  <div class="building-edit-actions">
+                    <button class="secondary-button" id="building-add-property" type="button">Add property</button>
+                    <button class="primary-button" type="submit">Save building data</button>
+                    <span id="building-edit-status" class="review-status" role="status"></span>
+                  </div>
+                </form>
+                <div id="building-property-list" class="building-property-list"></div>
+              </section>
+              <section class="building-detail-subsection">
+                <div class="detail-section-heading"><h3 data-i18n="buildingFiles">Building files</h3><span id="building-document-count"></span></div>
+                <div id="building-document-list" class="building-document-list"></div>
+              </section>
+              <section class="building-detail-subsection">
+                <div class="detail-section-heading"><h3 data-i18n="maintenance">Maintenance &amp; alerts</h3><span data-i18n="reviewRequired">Review required</span></div>
+                <div id="building-maintenance-list" class="maintenance-list"></div>
+              </section>
+              <div class="building-detail-grid">
+                <section class="building-detail-column">
+                  <div class="detail-section-heading"><h3 data-i18n="pdfImages">Images from the PDF</h3><span id="building-image-count"></span></div>
+                  <div id="building-image-gallery" class="building-image-gallery"></div>
+                </section>
+                <section class="building-detail-column">
+                  <div class="detail-section-heading"><h3 data-i18n="simplifiedModel">Simplified 3D model</h3><span data-i18n="aiEstimate">AI estimate</span></div>
+                  <div id="twin-viewer" class="twin-viewer" data-i18n="generateFromPlan">Generate a draft from a saved PDF floor plan.</div>
+                  <p class="twin-provider-note" data-i18n="twinProviderNote">Generating a draft sends up to five rendered PDF pages to the selected AI provider.</p>
+                  <p id="twin-scale-note" class="twin-scale-note" data-i18n="twinScaleNote">The generated geometry is approximate and should be checked against the source plan.</p>
+                  <div id="twin-room-list" class="twin-room-list" role="list" aria-label="Editable rooms in the 3D model" data-i18n-aria-label="editableRooms"></div>
+                  <div class="twin-actions">
+                    <label class="sr-only" for="twin-source-document" data-i18n="twinSource">PDF source document</label>
+                    <select id="twin-source-document" class="provider-select" aria-label="PDF source document" data-i18n-aria-label="twinSource"></select>
+                    <button id="generate-twin" class="secondary-button" type="button" data-i18n="generateTwin">Generate 3D draft</button>
+                    <button id="save-twin" class="primary-button" type="button" data-i18n="saveTwin" hidden>Save reviewed model</button>
+                    <span id="twin-status" class="review-status" role="status"></span>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </dialog>
+
+          <footer class="footer"><span><span class="footer-mark">S</span> StadtManager <span class="footer-divider">·</span> <span data-i18n="footerTagline">A clearer view of your city</span></span><span data-i18n="footerBuilt">Built for thoughtful decisions.</span></footer>
+        </div>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="importmap">
+      {"imports":{"three":"https://unpkg.com/three@0.169.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.169.0/examples/jsm/"}}
+    </script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="/app.js?v=20261121-profile2" defer></script>
+  </body>
+</html>
