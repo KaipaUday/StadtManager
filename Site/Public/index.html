@@ -90,8 +90,8 @@
             </article>
             <article class="stat-card">
               <div class="stat-top"><span class="stat-icon peach"><svg viewBox="0 0 24 24"><path d="M4 19V5m0 14h17"/><path d="m7 15 4-4 3 2 6-7"/></svg></span><span class="stat-label">SUPPORTED DATA</span></div>
-              <div class="stat-value stat-word">5 formats</div>
-              <div class="stat-foot">CSV, JSON, PDF, MD, TXT</div>
+              <div class="stat-value stat-word">57 formats</div>
+              <div class="stat-foot" data-i18n="formatsFoot">PDF, Office, images, CAD, GAEB, e-mail, archives</div>
             </article>
           </section>
 
@@ -120,8 +120,8 @@
                 <span class="panel-step">01 <span>/ 02</span></span>
               </div>
               <div class="dropzone" id="dropzone">
-                <input id="file-input" type="file" multiple accept=".csv,.json,.md,.pdf,.txt" aria-hidden="true" tabindex="-1">
-                <input id="folder-input" type="file" webkitdirectory directory multiple accept=".csv,.json,.md,.pdf,.txt" aria-hidden="true" tabindex="-1">
+                <input id="file-input" type="file" multiple accept=".7z,.bpn,.cdr,.csv,.d81,.d83,.d84,.db,.doc,.docx,.dos,.dot,.dwg,.dxf,.gan,.gif,.gsm,.htm,.html,.info,.ini,.jpeg,.jpg,.json,.lck,.lnk,.lwi,.md,.mov,.msg,.p81,.p83,.pdf,.pla,.pln,.png,.pptx,.py,.rtf,.sample,.sgc,.shx,.tif,.tiff,.tmp,.tpl,.txt,.wbk,.x81,.x82,.x83,.x84,.xls,.xlsm,.xlsx,.xml,.zip" aria-hidden="true" tabindex="-1">
+                <input id="folder-input" type="file" webkitdirectory directory multiple accept=".7z,.bpn,.cdr,.csv,.d81,.d83,.d84,.db,.doc,.docx,.dos,.dot,.dwg,.dxf,.gan,.gif,.gsm,.htm,.html,.info,.ini,.jpeg,.jpg,.json,.lck,.lnk,.lwi,.md,.mov,.msg,.p81,.p83,.pdf,.pla,.pln,.png,.pptx,.py,.rtf,.sample,.sgc,.shx,.tif,.tiff,.tmp,.tpl,.txt,.wbk,.x81,.x82,.x83,.x84,.xls,.xlsm,.xlsx,.xml,.zip" aria-hidden="true" tabindex="-1">
                 <span class="upload-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v4h16v-4"/></svg></span>
                 <strong data-i18n="drop">Drop your files here</strong>
                 <span class="drop-subtitle">Choose individual files or import a folder</span>
@@ -130,7 +130,7 @@
                   <span>or</span>
                   <button class="browse-link" id="browse-folder" type="button" data-i18n="browseFolder">Choose folder</button>
                 </span>
-                <span class="file-limits">CSV, JSON, PDF, MD or TXT <i></i> Up to 100 MB each</span>
+                <span class="file-limits"><span data-i18n="fileLimits">PDF, Office, images, CAD, GAEB, e-mail, ZIP and more</span> <i></i> <span data-i18n="fileSize">Up to 100 MB each</span></span>
               </div>
               <div class="file-list-header"><span>RECENT FILES</span><span id="list-count">0 files</span></div>
               <div class="file-list" id="file-list">
@@ -234,6 +234,7 @@
                   <span id="preview-kind"></span>
                 </div>
                 <iframe id="pdf-preview" title="Uploaded PDF preview" hidden></iframe>
+                <img id="image-preview" alt="Uploaded image preview" hidden>
                 <pre id="text-preview" hidden></pre>
               </div>
             </div>

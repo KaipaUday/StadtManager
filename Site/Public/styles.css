@@ -201,7 +201,8 @@ h1 span { color: var(--green); }
 .document-preview-heading span { flex: 0 0 auto; color: #98a29a; font-size: 8px; }
 .document-preview iframe { display: block; width: 100%; height: 600px; border: 0; background: #e9ece8; }
 .document-preview pre { height: 600px; margin: 0; padding: 13px; overflow: auto; color: #56635a; font: 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-.document-preview iframe[hidden], .document-preview pre[hidden] { display: none; }
+.document-preview img { display: block; width: 100%; height: 600px; object-fit: contain; background: #e9ece8; }
+.document-preview iframe[hidden], .document-preview pre[hidden], .document-preview img[hidden] { display: none; }
 .map-section { scroll-margin-top: 80px; }
 .map-building-count { flex: 0 0 auto; padding: 7px 9px; border: 1px solid #e7ebe5; border-radius: 7px; color: #7b887e; font-size: 9px; }
 .map-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; height: 550px; margin-top: 15px; }
@@ -341,7 +342,7 @@ h1 span { color: var(--green); }
   .map-layout { grid-template-columns: 1fr; height: auto; }
   .city-map { min-height: 430px; }
   .map-records { max-height: 240px; }
-  .document-preview iframe, .document-preview pre { height: 440px; }
+  .document-preview iframe, .document-preview pre, .document-preview img { height: 440px; }
   .building-detail-grid { grid-template-columns: 1fr; }
   .building-image-gallery { max-height: 350px; }
   .twin-viewer { min-height: 320px; }
@@ -385,7 +386,7 @@ h1 span { color: var(--green); }
   .review-field-row.has-other .other-category { grid-column: 1 / 3; grid-row: 2; }
   .map-building-count { max-width: 90px; font-size: 8px; text-align: center; }
   .city-map { min-height: 350px; }
-  .document-preview iframe, .document-preview pre { height: 360px; }
+  .document-preview iframe, .document-preview pre, .document-preview img { height: 360px; }
   .panel-heading h2 { font-size: 15px; }
   .panel-heading p { max-width: 210px; font-size: 9px; line-height: 1.5; }
   .dropzone { min-height: 145px; }

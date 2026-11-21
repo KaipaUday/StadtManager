@@ -399,6 +399,7 @@ class BuildingWorkflowTests(unittest.TestCase):
                    building_id INTEGER PRIMARY KEY, model_json TEXT NOT NULL,
                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"""
             )
+        connection.close()  # "with" only commits; Windows keeps the file locked until it is closed
         try:
             module.DB_PATH = legacy_path
             module.initialize_database()

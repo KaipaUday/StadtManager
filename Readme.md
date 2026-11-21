@@ -11,10 +11,46 @@ python -m uvicorn app:app --app-dir Site --reload
 ```
 
 Open <http://127.0.0.1:8000>. Press `Ctrl+C` to stop the server. The site
-supports individual files or whole folders containing CSV, JSON, PDF,
-Markdown, and text files up to 100 MB each by default. Supported files are processed one
-at a time. Review extracted building details, add categories such as heating
-system, and accept each record before it is saved.
+supports individual files or whole folders with 57 file types (see
+[Supported file types](#supported-file-types)) up to 100 MB each by default.
+Supported files are processed one at a time. Review extracted building details,
+add categories such as heating system, and accept each record before it is saved.
+
+## Supported file types
+
+Every listed type can be uploaded and is stored unchanged in SQLite. Where the
+format contains text, the text is extracted for the preview, the AI field
+extraction, and the local full-text search. No extra Python packages are needed
+beyond `requirements.txt`; the readers live in `Site/file_formats.py`.
+
+| Group | Extensions | What is read |
+| --- | --- | --- |
+| PDF | `.pdf` | Text per page, OCR for scanned pages, page previews, embedded images |
+| Images | `.jpg` `.jpeg` `.png` `.gif` `.tif` `.tiff` | OCR text (Tesseract), page preview, 3D draft from scanned plans |
+| Word | `.docx` `.doc` `.dot` `.wbk` `.rtf` | Body text, tables, headers and footers |
+| Excel | `.xlsx` `.xlsm` `.xls` `.csv` | All sheets, cell values (CSV with `,` or `;`) |
+| PowerPoint | `.pptx` | Text of each slide and its notes |
+| E-mail | `.msg` | Subject, sender, recipients, attachment names, body |
+| Web / data | `.html` `.htm` `.xml` `.json` `.gan` | Visible text, XML text and name attributes, GanttProject tasks |
+| GAEB | `.x81`–`.x84`, `.d81` `.d83` `.d84` `.p81` `.p83` | Tender texts (GAEB XML and GAEB 90/2000) |
+| CAD | `.dxf` | Layer names and drawing text (TEXT, MTEXT, attributes) |
+| Text | `.txt` `.md` `.ini` `.info` `.py` `.sample` `.tpl` `.dos` | Text (UTF-8, UTF-16 or Windows-1252) |
+| Archives | `.zip` | File list plus text of the supported files inside |
+| Stored only | `.dwg` `.pln` `.pla` `.bpn` `.gsm` `.shx` `.lwi` `.sgc` `.cdr` `.7z` `.mov` `.db` `.lnk` `.lck` `.tmp` | Saved as they are; enter building details manually |
+
+Damaged, password-protected, or unreadable files are still accepted and saved;
+the review panel explains why no text was found. Older binary Office files
+(`.doc`, `.xls`, `.msg`) are read directly from their compound-file structure.
+Uploaded HTML, XML, e-mails, and other non-viewable files are always served as
+downloads, so they can't run scripts inside the app.
+
+Run the tests with:
+
+```bash
+python -m unittest discover -s tests
+```
+
+`tests/test_file_formats.py` needs only the Python standard library.
 
 Accepted building records and their original files are stored locally in
 `data/stadtmanager.sqlite3` (the files are stored as database BLOBs). Unaccepted
