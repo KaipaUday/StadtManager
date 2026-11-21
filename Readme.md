@@ -18,15 +18,16 @@ add categories such as heating system, and accept each record before it is saved
 
 ## Supported file types
 
-Every listed type can be uploaded and is stored unchanged in SQLite. Where the
-format contains text, it is extracted for the preview and local full-text
-search. AI field extraction uses that text except for image-backed PDFs, whose
-rendered pages are analyzed visually. No extra Python packages are needed
-beyond `requirements.txt`; the readers live in `Site/file_formats.py`.
+Every listed type can be uploaded. Accepted originals are stored unchanged in
+SQLite. Where the format contains text, it is extracted for the preview and
+local full-text search. PDF field extraction sends up to the first eight pages
+directly to the selected AI provider; other formats use extracted text. No
+extra Python packages are needed beyond `requirements.txt`; the readers live in
+`Site/file_formats.py`.
 
 | Group | Extensions | What is read |
 | --- | --- | --- |
-| PDF | `.pdf` | Text per page, OCR, AI visual reading for scanned pages, page previews, embedded images |
+| PDF | `.pdf` | Text per page, local OCR, direct AI PDF reading (first eight pages), page previews, embedded images |
 | Images | `.jpg` `.jpeg` `.png` `.gif` `.tif` `.tiff` | OCR text (Tesseract), page preview, 3D draft from scanned plans |
 | Word | `.docx` `.doc` `.dot` `.wbk` `.rtf` | Body text, tables, headers and footers |
 | Excel | `.xlsx` `.xlsm` `.xls` `.csv` | All sheets, cell values (CSV with `,` or `;`) |
@@ -54,8 +55,9 @@ python -m unittest discover -s tests
 `tests/test_file_formats.py` needs only the Python standard library.
 
 Accepted building records and their original files are stored locally in
-`data/stadtmanager.sqlite3` (the files are stored as database BLOBs). Unaccepted
-or skipped files aren't saved. Street name and house number remain the unique
+`data/stadtmanager.sqlite3` (the files are stored as database BLOBs). Original
+files from skipped uploads aren't saved, but their structured AI analysis is.
+Street name and house number remain the unique
 address match, while each building also gets a unique, human-readable 3–8 letter
 code. The AI recommends a code for new buildings; review or edit it before
 saving. Uploads for an existing address reuse its saved code. A UUID and integer
@@ -115,7 +117,17 @@ During document extraction, the selected provider also receives up to the
 newest 100 saved buildings' UIDs, codes, names, and addresses so it can suggest
 a possible match. The suggestion is checked against saved records and shown for
 review; it does not merge or link a building automatically. The uploaded
-document text or rendered page images are sent to the provider as well.
+PDF is sent directly to the provider as a PDF (up to the first eight pages).
+For other file types, extracted text is sent. If direct PDF analysis returns no
+structured fields, pypdf extracts local PDF text and the provider retries using
+that text.
+
+Structured extraction results, maintenance suggestions, chat questions and
+answers, and AI 3D drafts are saved locally for future searches and predictions.
+Extraction results are retained even when an upload is skipped. The original
+file is saved only after acceptance. The app stores structured outputs, not raw
+extraction responses or private model reasoning. **Clear data** removes these
+AI records along with saved buildings and files.
 
 ## Large documents, OCR, and AI search
 
@@ -140,13 +152,12 @@ text is stored in SQLite's local full-text index. Documents over the page limit,
 missing OCR languages, and indexing failures are reported in the building's
 file list.
 
-During upload, image-backed PDF pages are also visually analyzed by the
-selected AI provider. For those PDFs, field extraction receives rendered page
-images rather than the PDF's embedded text layer, which can be inaccurate even
-when it contains many characters. Visual analysis is limited to the first eight
-pages. Local text extraction and OCR remain in use for preview and saved-file
-search; the rendered images are sent to the selected provider for visual
-extraction.
+During upload, the selected AI provider receives the PDF itself, limited to its
+first eight pages. The provider can read selectable text and visual content
+such as tables and scanned pages. If it returns no structured building fields,
+the app uses pypdf to extract text locally and retries the structured
+extraction. Local OCR and text extraction remain in use for preview and
+saved-file search.
 
 Every AI chat request automatically searches both the SQLite building records
 and the indexed contents of saved files. The assistant receives the bounded
@@ -156,7 +167,8 @@ partially indexed documents are identified so the assistant can disclose
 incomplete coverage. Existing saved files are queued for indexing as chat
 requests arrive. Matching document passages and database information are sent
 to the selected AI provider with the chat request; original file bytes are not
-sent as part of this retrieval context.
+sent as part of this retrieval context. Relevant saved AI extraction results
+and previous chat answers are also included as unverified context.
 
 When a document contains explicit repair, replacement, inspection, or scheduled
 maintenance information, the AI may extract an evidence-backed suggestion.

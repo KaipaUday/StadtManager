@@ -89,6 +89,7 @@ const translations = {
     maintenanceCopy: "AI findings stay suggestions until you confirm them. Track upcoming repairs here.",
     fileWorkspace: "File workspace",
     fileCopy: "Drop in a file to preview and prepare it for analysis.",
+    analysisRetentionNote: "AI analysis results and chat answers are saved locally for future queries, even if you skip a file. Original files are saved only after you accept them.",
     drop: "Drop your files here",
     browseFiles: "Browse files",
     browseFolder: "Choose folder",
@@ -154,8 +155,22 @@ const translations = {
     building: "Building",
     close: "Close",
     buildingFiles: "Building files",
+    noBuildingFiles: "No files are attached to this building.",
+    attachmentOpen: "Open",
+    attachmentOriginal: "Original",
+    indexWaiting: "Waiting for text indexing",
+    indexProcessing: "Extracting and indexing text…",
+    searchable: "Searchable",
+    pageSingular: "page",
+    pagePlural: "pages",
+    indexPartial: "Partially indexed",
+    indexFailed: "Indexing failed",
+    indexUnavailable: "Index status unavailable",
     reviewRequired: "Review required",
-    pdfImages: "Images from the PDF",
+    pdfImages: "Embedded images",
+    embeddedImage: "Embedded image",
+    pageLabel: "page",
+    noEmbeddedImages: "No large embedded image objects were found in the attached documents.",
     simplifiedModel: "Simplified 3D model",
     aiEstimate: "AI estimate",
     generateFromPlan: "Generate a draft from a saved PDF floor plan.",
@@ -187,6 +202,7 @@ const translations = {
     maintenanceCopy: "KI-Ergebnisse bleiben Vorschläge, bis Sie diese bestätigen. Verfolgen Sie bevorstehende Reparaturen.",
     fileWorkspace: "Datei-Arbeitsbereich",
     fileCopy: "Legen Sie eine Datei ab, um sie anzusehen und für die Analyse vorzubereiten.",
+    analysisRetentionNote: "KI-Analyseergebnisse und Chat-Antworten werden lokal für spätere Anfragen gespeichert, auch wenn Sie eine Datei überspringen. Originaldateien werden erst nach Ihrer Bestätigung gespeichert.",
     drop: "Legen Sie Ihre Dateien hier ab",
     browseFiles: "Dateien auswählen",
     browseFolder: "Ordner auswählen",
@@ -252,8 +268,22 @@ const translations = {
     building: "Gebäude",
     close: "Schließen",
     buildingFiles: "Gebäudedateien",
+    noBuildingFiles: "Keine Dateien an dieses Gebäude angehängt.",
+    attachmentOpen: "Öffnen",
+    attachmentOriginal: "Originaldatei",
+    indexWaiting: "Wartet auf Texterkennung",
+    indexProcessing: "Text wird extrahiert und indexiert…",
+    searchable: "Durchsuchbar",
+    pageSingular: "Seite",
+    pagePlural: "Seiten",
+    indexPartial: "Teilweise indexiert",
+    indexFailed: "Indexierung fehlgeschlagen",
+    indexUnavailable: "Indexstatus nicht verfügbar",
     reviewRequired: "Prüfung erforderlich",
-    pdfImages: "Bilder aus dem PDF",
+    pdfImages: "Eingebettete Bilder",
+    embeddedImage: "Eingebettetes Bild",
+    pageLabel: "Seite",
+    noEmbeddedImages: "Keine größeren eingebetteten Bildobjekte in den angehängten Dokumenten gefunden.",
     simplifiedModel: "Vereinfachtes 3D-Modell",
     aiEstimate: "KI-Schätzung",
     generateFromPlan: "Erstellen Sie einen Entwurf aus einem gespeicherten PDF-Grundriss.",
@@ -481,7 +511,13 @@ function displayPreview(file, result = null) {
   }
 }
 function previewKindLabel(kind, extractionMethod) {
-  if (extractionMethod !== "vision") return kind;
+  if (extractionMethod === "pdf") {
+    return state.language === "de" ? `${kind} · KI-PDF-Analyse` : `${kind} · AI PDF analysis`;
+  }
+  if (extractionMethod === "pypdf-fallback") {
+    return state.language === "de" ? `${kind} · KI-Textfallback` : `${kind} · AI text fallback`;
+  }
+  if (!["vision", "vision-fallback"].includes(extractionMethod)) return kind;
   return state.language === "de" ? `${kind} · KI-Bildanalyse` : `${kind} · AI visual read`;
 }
 
@@ -758,7 +794,7 @@ async function validateAddress() {
   formData.append("house_number", houseNumber);
   formData.append("full_address", fullAddress);
   const response = await fetch("/api/address/validate", { method: "POST", body: formData });
-  const result = await response.json();
+  const result = await readApiJson(response);
   if (
     requestId !== state.addressRequestId
     || streetName !== document.querySelector("#street-name").value.trim()
@@ -811,6 +847,20 @@ async function validateAddress() {
           ? `Address found: ${result.display_name}. Your selected map point was kept.`
           : `Address found: ${result.display_name}.`;
   return result;
+}
+
+async function readApiJson(response) {
+  const body = await response.text();
+  try {
+    return JSON.parse(body);
+  } catch {
+    if (!response.ok) {
+      return {
+        detail: body.trim().slice(0, 500) || `Request failed with status ${response.status}.`,
+      };
+    }
+    throw new Error(`The server returned invalid JSON (HTTP ${response.status}).`);
+  }
 }
 
 function scheduleAddressValidation() {
@@ -913,6 +963,7 @@ async function acceptBuilding() {
     ]),
   );
   formData.append("conflict_resolutions_json", JSON.stringify(resolutions));
+  formData.append("ai_record_uid", state.currentExtraction?.ai_record_uid || "");
   const acceptButton = document.querySelector("#accept-building");
   acceptButton.disabled = true;
   document.querySelector("#review-status").textContent = state.pendingMerge
@@ -920,7 +971,7 @@ async function acceptBuilding() {
     : "Saving file and building data…";
   try {
     const response = await fetch("/api/buildings", { method: "POST", body: formData });
-    const result = await response.json();
+    const result = await readApiJson(response);
     if (!response.ok) {
       const detail = result.detail;
       if (response.status === 409 && detail && typeof detail === "object"
@@ -1425,28 +1476,38 @@ async function openBuildingDetails(buildingId) {
     const documents = documentsResult.documents || [];
     const documentList = document.querySelector("#building-document-list");
     if (!documents.length) {
-      documentList.textContent = "No files are attached to this building.";
+      documentList.textContent = translations[state.language].noBuildingFiles;
     } else {
       documentList.replaceChildren(...documents.map((source) => {
-        const row = document.createElement("div");
-        row.className = "building-document-row";
-        const fileName = document.createElement("span");
+        const row = document.createElement("a");
+        row.className = "building-attachment";
+        row.href = source.url;
+        row.target = "_blank";
+        row.rel = "noreferrer";
+        row.title = source.file_name;
+        row.setAttribute("aria-label", `${translations[state.language].attachmentOpen} ${source.file_name}`);
+        const type = document.createElement("span");
+        type.className = "building-attachment-type";
+        type.textContent = fileExtension(source.file_name).toUpperCase() || "FILE";
+        const details = document.createElement("span");
+        details.className = "building-attachment-details";
+        const fileName = document.createElement("strong");
         fileName.textContent = source.file_name;
         const status = document.createElement("small");
+        const language = translations[state.language];
         const statusLabels = {
-          pending: "Waiting for text indexing",
-          processing: "Extracting and indexing text…",
-          ready: `Searchable · ${source.indexed_pages} page${source.indexed_pages === 1 ? "" : "s"}`,
-          partial: `Partially indexed · ${source.index_error}`,
-          failed: `Indexing failed · ${source.index_error}`,
+          pending: language.indexWaiting,
+          processing: language.indexProcessing,
+          ready: `${language.searchable} · ${source.indexed_pages} ${source.indexed_pages === 1 ? language.pageSingular : language.pagePlural}`,
+          partial: `${language.indexPartial} · ${source.index_error}`,
+          failed: `${language.indexFailed} · ${source.index_error}`,
         };
-        status.textContent = statusLabels[source.index_status] || "Index status unavailable";
-        const link = document.createElement("a");
-        link.href = source.url;
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        link.textContent = source.is_primary ? "Original file" : "Open file";
-        row.append(fileName, status, link);
+        status.textContent = statusLabels[source.index_status] || language.indexUnavailable;
+        details.append(fileName, status);
+        const openLabel = document.createElement("span");
+        openLabel.className = "building-attachment-open";
+        openLabel.textContent = source.is_primary ? language.attachmentOriginal : language.attachmentOpen;
+        row.append(type, details, openLabel);
         return row;
       }));
       document.querySelector("#building-document-count").textContent =
@@ -1488,23 +1549,22 @@ async function openBuildingDetails(buildingId) {
       "No open maintenance items for this building.",
     );
     const gallery = document.querySelector("#building-image-gallery");
-    const assets = assetsResult.assets || [];
+    const assets = (assetsResult.assets || []).filter((asset) => asset.asset_type === "embedded-image");
     if (!assets.length) {
-      gallery.innerHTML = '<div class="map-empty">No PDF images were saved for this object.</div>';
+      const emptyGallery = document.createElement("div");
+      emptyGallery.className = "map-empty";
+      emptyGallery.textContent = translations[state.language].noEmbeddedImages;
+      gallery.replaceChildren(emptyGallery);
     } else {
       gallery.replaceChildren(...assets.map((asset) => {
         const card = document.createElement("figure");
         card.className = "building-image-card";
         const image = document.createElement("img");
         image.src = asset.url;
-        image.alt = asset.asset_type === "floorplan-page"
-          ? `PDF floor plan page ${asset.page_number}`
-          : `Image extracted from PDF page ${asset.page_number}`;
+        image.alt = `${translations[state.language].embeddedImage} ${translations[state.language].pageLabel} ${asset.page_number}`;
         image.loading = "lazy";
         const caption = document.createElement("figcaption");
-        caption.textContent = asset.asset_type === "floorplan-page"
-          ? `Floor-plan page ${asset.page_number}`
-          : `Embedded image · page ${asset.page_number}`;
+        caption.textContent = `${translations[state.language].embeddedImage} · ${translations[state.language].pageLabel} ${asset.page_number}`;
         if (asset.source_file_name) caption.textContent += ` · ${asset.source_file_name}`;
         card.append(image, caption);
         return card;
@@ -1908,8 +1968,8 @@ document.querySelector("#language-toggle").addEventListener("click", () => {
 });
 document.querySelector("#clear-data").addEventListener("click", async () => {
   const message = state.language === "de"
-    ? "Alle gespeicherten Gebäude, Dateien, Wartungsmeldungen und 3D-Modelle unwiderruflich löschen?"
-    : "Permanently delete all saved buildings, files, maintenance alerts, and 3D models?";
+    ? "Alle gespeicherten Gebäude, Dateien, KI-Analysen, Chat-Antworten, Wartungsmeldungen und 3D-Modelle unwiderruflich löschen?"
+    : "Permanently delete all saved buildings, files, AI analyses, chat answers, maintenance alerts, and 3D models?";
   if (!window.confirm(message)) return;
   try {
     const response = await fetch("/api/data", { method: "DELETE" });
