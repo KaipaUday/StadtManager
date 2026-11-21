@@ -10,6 +10,9 @@ const modelSelect = document.querySelector("#model-select");
 const keyStatus = document.querySelector("#key-status");
 const sendButton = document.querySelector("#send-button");
 const toast = document.querySelector("#toast");
+const buildingFilesInput = document.querySelector("#building-files-input");
+const buildingDrawingInput = document.querySelector("#building-drawing-input");
+buildingFilesInput.accept = fileInput.accept;
 
 const state = {
   files: [],
@@ -69,8 +72,6 @@ const SUPPORTED_EXTENSIONS = [
   "xlsm", "xlsx", "xml", "zip",
 ];
 const BROWSER_IMAGE_EXTENSIONS = ["gif", "jpeg", "jpg", "png"];
-const RENDERABLE_EXTENSIONS = ["gif", "jpeg", "jpg", "pdf", "png", "tif", "tiff"];
-
 function fileExtension(name) {
   const match = /\.([^./\\]+)$/.exec(name || "");
   return match ? match[1].toLowerCase() : "";
@@ -100,6 +101,7 @@ const translations = {
     maintenanceCopy: "AI findings stay suggestions until you confirm them. Track upcoming repairs here.",
     fileWorkspace: "File workspace",
     fileCopy: "Drop in a file to preview and prepare it for analysis.",
+    analysisRetentionNote: "AI analysis results and chat answers are saved locally for future queries, even if you skip a file. Original files are saved only after you accept them.",
     drop: "Drop your files here",
     browseFiles: "Browse files",
     browseFolder: "Choose folder",
@@ -164,9 +166,36 @@ const translations = {
     buildingTwin: "BUILDING DIGITAL TWIN",
     building: "Building",
     close: "Close",
-    buildingFiles: "Building files",
+    buildingFiles: "Building files & extracted text",
+    noBuildingFiles: "No files are attached to this building.",
+    addAttachments: "Add attachments",
+    addDrawingPdf: "Add drawing PDF",
+    attachmentTextHint: "Expand a file to view its saved parsed text and AI extraction. Excel sheets are indexed locally.",
+    viewSavedContent: "View saved content",
+    parsedDocumentText: "Parsed document text",
+    documentTextTruncated: "Only the first 200,000 characters are shown.",
+    savedAiExtraction: "Saved AI extraction",
+    noParsedText: "No parsed text is available for this file.",
+    noSavedAiExtraction: "No saved AI extraction is linked to this file.",
+    documentTextUnavailable: "Could not load saved document content.",
+    attachmentUploadFailed: "Could not attach the selected files.",
+    selectDrawingPdf: "Choose a drawing PDF",
+    noDrawingPdf: "Add a PDF drawing first",
+    attachmentsSaved: "Attachments saved; text indexing has started.",
+    attachmentOpen: "Open",
+    attachmentOriginal: "Original",
+    indexWaiting: "Waiting for text indexing",
+    indexProcessing: "Extracting and indexing text…",
+    searchable: "Searchable",
+    pageSingular: "page",
+    pagePlural: "pages",
+    indexPartial: "Partially indexed",
+    indexFailed: "Indexing failed",
+    indexUnavailable: "Index status unavailable",
     reviewRequired: "Review required",
-    pdfImages: "Images from the PDF",
+    pdfImages: "Embedded images",
+    embeddedImage: "Embedded image",
+    pageLabel: "page",
     simplifiedModel: "Simplified 3D model",
     aiEstimate: "AI estimate",
     generateFromPlan: "Generate a draft from a saved PDF floor plan.",
@@ -227,6 +256,7 @@ const translations = {
     maintenanceCopy: "KI-Ergebnisse bleiben Vorschläge, bis Sie diese bestätigen. Verfolgen Sie bevorstehende Reparaturen.",
     fileWorkspace: "Datei-Arbeitsbereich",
     fileCopy: "Legen Sie eine Datei ab, um sie anzusehen und für die Analyse vorzubereiten.",
+    analysisRetentionNote: "KI-Analyseergebnisse und Chat-Antworten werden lokal für spätere Anfragen gespeichert, auch wenn Sie eine Datei überspringen. Originaldateien werden erst nach Ihrer Bestätigung gespeichert.",
     drop: "Legen Sie Ihre Dateien hier ab",
     browseFiles: "Dateien auswählen",
     browseFolder: "Ordner auswählen",
@@ -291,9 +321,36 @@ const translations = {
     buildingTwin: "DIGITALER GEBÄUDEZWILLING",
     building: "Gebäude",
     close: "Schließen",
-    buildingFiles: "Gebäudedateien",
+    buildingFiles: "Gebäudedateien und extrahierter Text",
+    noBuildingFiles: "Keine Dateien an dieses Gebäude angehängt.",
+    addAttachments: "Dateien anhängen",
+    addDrawingPdf: "Zeichnungs-PDF hinzufügen",
+    attachmentTextHint: "Datei aufklappen, um gespeicherten Text und KI-Auswertung zu sehen. Excel-Dateien werden lokal indexiert.",
+    viewSavedContent: "Gespeicherte Inhalte anzeigen",
+    parsedDocumentText: "Extrahierter Dokumenttext",
+    documentTextTruncated: "Es werden nur die ersten 200.000 Zeichen angezeigt.",
+    savedAiExtraction: "Gespeicherte KI-Auswertung",
+    noParsedText: "Für diese Datei ist kein extrahierter Text verfügbar.",
+    noSavedAiExtraction: "Mit dieser Datei ist keine KI-Auswertung verknüpft.",
+    documentTextUnavailable: "Gespeicherte Dokumentinhalte konnten nicht geladen werden.",
+    attachmentUploadFailed: "Die ausgewählten Dateien konnten nicht angehängt werden.",
+    selectDrawingPdf: "Zeichnungs-PDF auswählen",
+    noDrawingPdf: "Zuerst ein PDF hinzufügen",
+    attachmentsSaved: "Dateien gespeichert; die Textindexierung wurde gestartet.",
+    attachmentOpen: "Öffnen",
+    attachmentOriginal: "Originaldatei",
+    indexWaiting: "Wartet auf Texterkennung",
+    indexProcessing: "Text wird extrahiert und indexiert…",
+    searchable: "Durchsuchbar",
+    pageSingular: "Seite",
+    pagePlural: "Seiten",
+    indexPartial: "Teilweise indexiert",
+    indexFailed: "Indexierung fehlgeschlagen",
+    indexUnavailable: "Indexstatus nicht verfügbar",
     reviewRequired: "Prüfung erforderlich",
-    pdfImages: "Bilder aus dem PDF",
+    pdfImages: "Eingebettete Bilder",
+    embeddedImage: "Eingebettetes Bild",
+    pageLabel: "Seite",
     simplifiedModel: "Vereinfachtes 3D-Modell",
     aiEstimate: "KI-Schätzung",
     generateFromPlan: "Erstellen Sie einen Entwurf aus einem gespeicherten PDF-Grundriss.",
@@ -600,7 +657,13 @@ function displayPreview(file, result = null) {
   }
 }
 function previewKindLabel(kind, extractionMethod) {
-  if (extractionMethod !== "vision") return kind;
+  if (extractionMethod === "pdf") {
+    return state.language === "de" ? `${kind} · KI-PDF-Analyse` : `${kind} · AI PDF analysis`;
+  }
+  if (extractionMethod === "pypdf-fallback") {
+    return state.language === "de" ? `${kind} · KI-Textfallback` : `${kind} · AI text fallback`;
+  }
+  if (!["vision", "vision-fallback"].includes(extractionMethod)) return kind;
   return state.language === "de" ? `${kind} · KI-Bildanalyse` : `${kind} · AI visual read`;
 }
 
@@ -877,7 +940,7 @@ async function validateAddress() {
   formData.append("house_number", houseNumber);
   formData.append("full_address", fullAddress);
   const response = await fetch("/api/address/validate", { method: "POST", body: formData });
-  const result = await response.json();
+  const result = await readApiJson(response);
   if (
     requestId !== state.addressRequestId
     || streetName !== document.querySelector("#street-name").value.trim()
@@ -930,6 +993,20 @@ async function validateAddress() {
           ? `Address found: ${result.display_name}. Your selected map point was kept.`
           : `Address found: ${result.display_name}.`;
   return result;
+}
+
+async function readApiJson(response) {
+  const body = await response.text();
+  try {
+    return JSON.parse(body);
+  } catch {
+    if (!response.ok) {
+      return {
+        detail: body.trim().slice(0, 500) || `Request failed with status ${response.status}.`,
+      };
+    }
+    throw new Error(`The server returned invalid JSON (HTTP ${response.status}).`);
+  }
 }
 
 function scheduleAddressValidation() {
@@ -1032,6 +1109,7 @@ async function acceptBuilding() {
     ]),
   );
   formData.append("conflict_resolutions_json", JSON.stringify(resolutions));
+  formData.append("ai_record_uid", state.currentExtraction?.ai_record_uid || "");
   const acceptButton = document.querySelector("#accept-building");
   acceptButton.disabled = true;
   document.querySelector("#review-status").textContent = state.pendingMerge
@@ -1039,7 +1117,7 @@ async function acceptBuilding() {
     : "Saving file and building data…";
   try {
     const response = await fetch("/api/buildings", { method: "POST", body: formData });
-    const result = await response.json();
+    const result = await readApiJson(response);
     if (!response.ok) {
       const detail = result.detail;
       if (response.status === 409 && detail && typeof detail === "object"
@@ -1523,6 +1601,156 @@ function addBuildingEditField(name = "", value = "") {
   document.querySelector("#building-edit-fields").append(row);
 }
 
+function documentIndexStatus(source, language) {
+  const statusLabels = {
+    pending: language.indexWaiting,
+    processing: language.indexProcessing,
+    ready: `${language.searchable} · ${source.indexed_pages} ${source.indexed_pages === 1 ? language.pageSingular : language.pagePlural}`,
+    partial: `${language.indexPartial} · ${source.index_error}`,
+    failed: `${language.indexFailed} · ${source.index_error}`,
+  };
+  return statusLabels[source.index_status] || language.indexUnavailable;
+}
+
+function createBuildingDocumentCard(source, buildingId, language) {
+  const item = document.createElement("article");
+  item.className = "building-document-item";
+  const row = document.createElement("a");
+  row.className = "building-attachment";
+  row.href = source.url;
+  row.target = "_blank";
+  row.rel = "noreferrer";
+  row.title = source.file_name;
+  row.setAttribute("aria-label", `${language.attachmentOpen} ${source.file_name}`);
+  const type = document.createElement("span");
+  type.className = "building-attachment-type";
+  type.textContent = fileExtension(source.file_name).toUpperCase() || "FILE";
+  const details = document.createElement("span");
+  details.className = "building-attachment-details";
+  const fileName = document.createElement("strong");
+  fileName.textContent = source.file_name;
+  const status = document.createElement("small");
+  status.textContent = documentIndexStatus(source, language);
+  details.append(fileName, status);
+  const openLabel = document.createElement("span");
+  openLabel.className = "building-attachment-open";
+  openLabel.textContent = source.is_primary ? language.attachmentOriginal : language.attachmentOpen;
+  row.append(type, details, openLabel);
+
+  const content = document.createElement("details");
+  content.className = "building-document-content";
+  const summary = document.createElement("summary");
+  summary.textContent = language.viewSavedContent;
+  const panel = document.createElement("div");
+  panel.className = "building-document-content-panel";
+  content.append(summary, panel);
+
+  let loading = false;
+  let refreshTimer;
+  async function loadContent() {
+    if (loading) return;
+    loading = true;
+    panel.replaceChildren();
+    const loadingStatus = document.createElement("div");
+    loadingStatus.className = "building-document-content-status";
+    loadingStatus.textContent = language.indexProcessing;
+    panel.append(loadingStatus);
+    try {
+      const query = source.id === null ? "" : `?document_id=${encodeURIComponent(source.id)}`;
+      const response = await fetch(`/api/buildings/${buildingId}/document-text${query}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || language.documentTextUnavailable);
+      if (state.activeBuildingId !== buildingId) return;
+      source.index_status = result.index_status;
+      source.indexed_pages = result.indexed_pages;
+      source.index_error = result.index_error;
+      status.textContent = documentIndexStatus(source, language);
+      panel.replaceChildren();
+      const indexStatus = document.createElement("div");
+      indexStatus.className = "building-document-content-status";
+      indexStatus.textContent = documentIndexStatus(source, language);
+      panel.append(indexStatus);
+
+      const textHeading = document.createElement("h4");
+      textHeading.textContent = language.parsedDocumentText;
+      const parsedText = document.createElement("pre");
+      parsedText.textContent = result.parsed_text || language.noParsedText;
+      panel.append(textHeading, parsedText);
+      if (result.parsed_text_truncated) {
+        const truncatedNote = document.createElement("div");
+        truncatedNote.className = "building-document-content-status";
+        truncatedNote.textContent = language.documentTextTruncated;
+        panel.append(truncatedNote);
+      }
+
+      const aiHeading = document.createElement("h4");
+      aiHeading.textContent = language.savedAiExtraction;
+      const aiData = document.createElement("pre");
+      aiData.textContent = result.ai_extraction
+        ? `${result.ai_extraction.provider} · ${result.ai_extraction.model}\n${JSON.stringify(result.ai_extraction.data, null, 2)}`
+        : language.noSavedAiExtraction;
+      panel.append(aiHeading, aiData);
+      if (["pending", "processing"].includes(result.index_status) && content.open) {
+        refreshTimer = setTimeout(loadContent, 1500);
+      }
+    } catch (error) {
+      panel.replaceChildren();
+      const errorStatus = document.createElement("div");
+      errorStatus.className = "building-document-content-status";
+      errorStatus.textContent = error.message || language.documentTextUnavailable;
+      panel.append(errorStatus);
+    } finally {
+      loading = false;
+    }
+  }
+  content.addEventListener("toggle", () => {
+    clearTimeout(refreshTimer);
+    if (content.open) loadContent();
+  });
+  item.append(row, content);
+  return item;
+}
+
+async function uploadBuildingDocuments(input, button) {
+  const files = [...input.files];
+  const buildingId = state.activeBuildingId;
+  if (!buildingId || !files.length) return;
+  const language = translations[state.language];
+  const formData = new FormData();
+  for (const file of files) formData.append("files", file, file.name);
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/buildings/${buildingId}/documents`, {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = typeof result.detail === "string" ? result.detail : result.detail?.message;
+      throw new Error(detail || language.attachmentUploadFailed);
+    }
+    if (state.activeBuildingId === buildingId && document.querySelector("#building-detail-dialog").open) {
+      await openBuildingDetails(buildingId);
+      const uploadedPdf = input === buildingDrawingInput
+        ? [...(result.documents || [])].reverse().find((file) =>
+          file.mime_type === "application/pdf" || fileExtension(file.file_name) === "pdf",
+        )
+        : null;
+      if (uploadedPdf && state.activeBuildingId === buildingId) {
+        document.querySelector("#twin-source-document").value = String(uploadedPdf.id);
+      }
+    }
+    showToast(result.warnings?.length
+      ? `${language.attachmentsSaved} ${result.warnings.join(" ")}`
+      : language.attachmentsSaved);
+  } catch (error) {
+    showToast(error.message || language.attachmentUploadFailed);
+  } finally {
+    button.disabled = false;
+    input.value = "";
+  }
+}
+
 async function openBuildingDetails(buildingId) {
   const building = state.buildings.find((record) => record.id === buildingId);
   if (!building) return;
@@ -1559,6 +1787,8 @@ async function openBuildingDetails(buildingId) {
     }));
   }
   document.querySelector("#building-detail-warning").hidden = true;
+  document.querySelector("#building-image-column").hidden = true;
+  document.querySelector("#building-detail-grid").classList.add("model-only");
   document.querySelector("#building-image-gallery").textContent = "Loading PDF images…";
   document.querySelector("#building-image-count").textContent = "";
   document.querySelector("#building-document-list").textContent = "Loading building files…";
@@ -1596,41 +1826,28 @@ async function openBuildingDetails(buildingId) {
     const documents = documentsResult.documents || [];
     const documentList = document.querySelector("#building-document-list");
     if (!documents.length) {
-      documentList.textContent = "No files are attached to this building.";
+      documentList.textContent = translations[state.language].noBuildingFiles;
+      document.querySelector("#building-document-count").textContent = "";
     } else {
-      documentList.replaceChildren(...documents.map((source) => {
-        const row = document.createElement("div");
-        row.className = "building-document-row";
-        const fileName = document.createElement("span");
-        fileName.textContent = source.file_name;
-        const status = document.createElement("small");
-        const statusLabels = {
-          pending: "Waiting for text indexing",
-          processing: "Extracting and indexing text…",
-          ready: `Searchable · ${source.indexed_pages} page${source.indexed_pages === 1 ? "" : "s"}`,
-          partial: `Partially indexed · ${source.index_error}`,
-          failed: `Indexing failed · ${source.index_error}`,
-        };
-        status.textContent = statusLabels[source.index_status] || "Index status unavailable";
-        const link = document.createElement("a");
-        link.href = source.url;
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        link.textContent = source.is_primary ? "Original file" : "Open file";
-        row.append(fileName, status, link);
-        return row;
-      }));
+      const language = translations[state.language];
+      documentList.replaceChildren(...documents.map((source) => createBuildingDocumentCard(source, buildingId, language)));
       document.querySelector("#building-document-count").textContent =
         `${documents.length} file${documents.length === 1 ? "" : "s"}`;
     }
 
     const pdfDocuments = documents.filter((source) =>
       source.mime_type === "application/pdf"
-      || /^image\/(jpeg|png|gif|tiff)$/.test(source.mime_type || "")
-      || RENDERABLE_EXTENSIONS.includes(fileExtension(source.file_name)),
+      || fileExtension(source.file_name) === "pdf",
     );
     const sourceSelect = document.querySelector("#twin-source-document");
     sourceSelect.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "__placeholder__";
+    placeholder.disabled = true;
+    placeholder.textContent = pdfDocuments.length
+      ? translations[state.language].selectDrawingPdf
+      : translations[state.language].noDrawingPdf;
+    sourceSelect.append(placeholder);
     for (const source of pdfDocuments) {
       const option = document.createElement("option");
       option.value = source.id === null ? "" : String(source.id);
@@ -1659,23 +1876,22 @@ async function openBuildingDetails(buildingId) {
       "No open maintenance items for this building.",
     );
     const gallery = document.querySelector("#building-image-gallery");
-    const assets = assetsResult.assets || [];
+    const assets = (assetsResult.assets || []).filter((asset) => asset.asset_type === "embedded-image");
     if (!assets.length) {
-      gallery.innerHTML = '<div class="map-empty">No PDF images were saved for this object.</div>';
+      gallery.replaceChildren();
+      document.querySelector("#building-image-count").textContent = "";
     } else {
+      document.querySelector("#building-image-column").hidden = false;
+      document.querySelector("#building-detail-grid").classList.remove("model-only");
       gallery.replaceChildren(...assets.map((asset) => {
         const card = document.createElement("figure");
         card.className = "building-image-card";
         const image = document.createElement("img");
         image.src = asset.url;
-        image.alt = asset.asset_type === "floorplan-page"
-          ? `PDF floor plan page ${asset.page_number}`
-          : `Image extracted from PDF page ${asset.page_number}`;
+        image.alt = `${translations[state.language].embeddedImage} ${translations[state.language].pageLabel} ${asset.page_number}`;
         image.loading = "lazy";
         const caption = document.createElement("figcaption");
-        caption.textContent = asset.asset_type === "floorplan-page"
-          ? `Floor-plan page ${asset.page_number}`
-          : `Embedded image · page ${asset.page_number}`;
+        caption.textContent = `${translations[state.language].embeddedImage} · ${translations[state.language].pageLabel} ${asset.page_number}`;
         if (asset.source_file_name) caption.textContent += ` · ${asset.source_file_name}`;
         card.append(image, caption);
         return card;
@@ -2132,6 +2348,7 @@ async function startAuthenticatedApp(user) {
   document.querySelector("#users-nav").hidden = !isCityAdmin;
   document.querySelector("#clear-data").hidden = !isCityAdmin;
   document.querySelector("#dropzone").hidden = !isWriter;
+  document.querySelector(".building-document-controls").hidden = !isWriter;
   document.querySelector("#calendar-event-form").hidden = !isWriter;
   document.querySelector("#review-panel").hidden = true;
   document.querySelector(".files-panel").hidden = !isWriter;
@@ -2185,6 +2402,14 @@ fileInput.addEventListener("change", () => queueFiles([...fileInput.files]));
 folderInput.addEventListener("change", () => queueFiles([...folderInput.files]));
 document.querySelector("#browse-files").addEventListener("click", () => fileInput.click());
 document.querySelector("#browse-folder").addEventListener("click", () => folderInput.click());
+document.querySelector("#add-building-files").addEventListener("click", () => buildingFilesInput.click());
+document.querySelector("#add-building-drawing").addEventListener("click", () => buildingDrawingInput.click());
+buildingFilesInput.addEventListener("change", () => {
+  uploadBuildingDocuments(buildingFilesInput, document.querySelector("#add-building-files"));
+});
+buildingDrawingInput.addEventListener("change", () => {
+  uploadBuildingDocuments(buildingDrawingInput, document.querySelector("#add-building-drawing"));
+});
 document.querySelector("#accept-building").addEventListener("click", acceptBuilding);
 document.querySelector("#skip-file").addEventListener("click", skipCurrentImport);
 document.querySelector("#building-search").addEventListener("input", renderBuildings);
@@ -2459,8 +2684,8 @@ document.querySelector("#profile-form").addEventListener("submit", async (event)
 });
 document.querySelector("#clear-data").addEventListener("click", async () => {
   const message = state.language === "de"
-    ? "Alle gespeicherten Gebäude, Dateien, Wartungsmeldungen und 3D-Modelle unwiderruflich löschen?"
-    : "Permanently delete all saved buildings, files, maintenance alerts, and 3D models?";
+    ? "Alle gespeicherten Gebäude, Dateien, KI-Analysen, Chat-Antworten, Wartungsmeldungen und 3D-Modelle unwiderruflich löschen?"
+    : "Permanently delete all saved buildings, files, AI analyses, chat answers, maintenance alerts, and 3D models?";
   if (!window.confirm(message)) return;
   try {
     const response = await fetch("/api/data", { method: "DELETE" });

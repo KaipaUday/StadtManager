@@ -58,6 +58,12 @@ class SupportedTypesTests(unittest.TestCase):
             page,
         )
         self.assertEqual(len(accept_lists), 2)
+        drawing_accept = re.search(
+            r'<input id="building-drawing-input"[^>]*accept="([^"]+)"',
+            page,
+        )
+        self.assertIsNotNone(drawing_accept, "PDF drawing input is missing")
+        self.assertEqual(drawing_accept.group(1), ".pdf,application/pdf")
         for accept in accept_lists:
             self.assertEqual(set(accept.split(",")), set(ff.SUPPORTED_EXTENSIONS))
 

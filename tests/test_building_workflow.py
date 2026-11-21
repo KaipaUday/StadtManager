@@ -18,6 +18,8 @@ os.environ["STADTMANAGER_DB_PATH"] = str(Path(_bootstrap_database.name) / "boots
 from Site import app as module
 from fastapi.testclient import TestClient
 
+from sample_files import minimal_xlsx
+
 
 class BuildingWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -180,6 +182,22 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(other.status_code, 200, other.text)
         assigned_id = assigned.json()["id"]
         other_id = other.json()["id"]
+        module.save_ai_generated_record(
+            "extraction",
+            "anthropic",
+            "test-model",
+            "assigned-analysis.txt",
+            {"finding": "assignedmarker"},
+            building_id=assigned_id,
+        )
+        module.save_ai_generated_record(
+            "extraction",
+            "anthropic",
+            "test-model",
+            "other-analysis.txt",
+            {"finding": "othermarker"},
+            building_id=other_id,
+        )
 
         created = self.client.post(
             "/api/admin/users",
@@ -220,6 +238,10 @@ class BuildingWorkflowTests(unittest.TestCase):
             [item["title"] for item in building_admin_client.get("/api/maintenance").json()["items"]],
             ["Check assigned roof"],
         )
+        scoped_ai_records, scoped_ai_count = module.search_saved_ai_records("assignedmarker", [assigned_id])
+        self.assertEqual(scoped_ai_count, 1)
+        self.assertIn("assigned-analysis.txt", scoped_ai_records)
+        self.assertNotIn("other-analysis.txt", scoped_ai_records)
         scoped_docs, scoped_doc_count, _ = module.search_saved_documents("quarry", [assigned_id])
         self.assertEqual(scoped_doc_count, 0)
         self.assertNotIn("other.txt", scoped_docs)
@@ -243,6 +265,18 @@ class BuildingWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(edited.status_code, 200, edited.text)
         self.assertEqual(edited.json()["fields"]["Roof material"], "Slate")
+        allowed_attachment = building_admin_client.post(
+            f"/api/buildings/{assigned_id}/documents",
+            files={"files": ("assigned-note.txt", b"Assigned note", "text/plain")},
+        )
+        self.assertEqual(allowed_attachment.status_code, 201, allowed_attachment.text)
+        self.assertEqual(
+            building_admin_client.post(
+                f"/api/buildings/{other_id}/documents",
+                files={"files": ("other-note.txt", b"Other note", "text/plain")},
+            ).status_code,
+            404,
+        )
         rejected_new_building = building_admin_client.post(
             "/api/buildings",
             data={"street_name": "Neuer Weg", "house_number": "5"},
@@ -274,6 +308,21 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(
             [item["title"] for item in employee_client.get("/api/maintenance").json()["items"]],
             ["Check assigned roof"],
+        )
+        self.assertEqual(
+            employee_client.get(f"/api/buildings/{assigned_id}/document-text").status_code,
+            200,
+        )
+        self.assertEqual(
+            employee_client.get(f"/api/buildings/{other_id}/document-text").status_code,
+            404,
+        )
+        self.assertEqual(
+            employee_client.post(
+                f"/api/buildings/{assigned_id}/documents",
+                files={"files": ("employee-note.txt", b"Not allowed", "text/plain")},
+            ).status_code,
+            403,
         )
         self.assertEqual(
             employee_client.patch(
@@ -969,6 +1018,64 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertIn("before the end of 2028", system_prompt)
         self.assertIn("page", system_prompt)
 
+    def test_building_attachments_index_excel_and_expose_saved_content(self) -> None:
+        saved = self.client.post(
+            "/api/buildings",
+            data={"street_name": "Marktplatz", "house_number": "5"},
+            files={"file": ("inspection.txt", b"Original inspection text", "text/plain")},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        building_id = saved.json()["id"]
+
+        with module.database() as connection:
+            connection.execute(
+                """INSERT INTO ai_generated_records
+                   (uid, record_type, provider, model, source_file_name, building_id, payload_json, search_text)
+                   VALUES (?, 'extraction', 'anthropic', 'test-model', ?, ?, ?, ?)""",
+                (
+                    "test-extraction-record",
+                    "inspection.txt",
+                    building_id,
+                    json.dumps({"fields": {"Heating": "District heating"}}),
+                    "Heating District heating",
+                ),
+            )
+
+        pdf = pymupdf.open()
+        page = pdf.new_page()
+        page.insert_text((72, 72), "Ground floor plan")
+        pdf_bytes = pdf.tobytes()
+        pdf.close()
+        added = self.client.post(
+            f"/api/buildings/{building_id}/documents",
+            files=[
+                ("files", ("building-register.xlsx", minimal_xlsx([["Street", "No"], ["Ketschengasse", "7"]]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                ("files", ("ground-floor.pdf", pdf_bytes, "application/pdf")),
+            ],
+        )
+        self.assertEqual(added.status_code, 201, added.text)
+        self.assertEqual(len(added.json()["documents"]), 2)
+
+        documents = self.client.get(f"/api/buildings/{building_id}/documents").json()["documents"]
+        spreadsheet = next(document for document in documents if document["file_name"] == "building-register.xlsx")
+        self.assertEqual(spreadsheet["index_status"], "ready")
+        spreadsheet_text = self.client.get(
+            f"/api/buildings/{building_id}/document-text?document_id={spreadsheet['id']}"
+        ).json()
+        self.assertIn("Sheet: Gebäude", spreadsheet_text["parsed_text"])
+        self.assertIn("Ketschengasse\t7", spreadsheet_text["parsed_text"])
+
+        original_text = self.client.get(f"/api/buildings/{building_id}/document-text").json()
+        self.assertIn("Original inspection text", original_text["parsed_text"])
+        self.assertEqual(
+            original_text["ai_extraction"]["data"]["fields"]["Heating"],
+            "District heating",
+        )
+        self.assertTrue(any(
+            document["file_name"] == "ground-floor.pdf" and document["mime_type"] == "application/pdf"
+            for document in documents
+        ))
+
     def test_upload_limit_exceeds_previous_five_megabyte_cap(self) -> None:
         self.assertGreater(module.MAX_UPLOAD_BYTES, 5 * 1024 * 1024)
         content = b"x" * (5 * 1024 * 1024 + 1)
@@ -1007,7 +1114,7 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertTrue(pages[0]["used_ocr"])
         self.assertFalse(any("Tesseract OCR" in warning for warning in warnings))
 
-    def test_image_backed_pdf_is_read_visually_by_selected_ai_provider(self) -> None:
+    def test_pdf_is_sent_directly_to_selected_ai_provider(self) -> None:
         source = pymupdf.open()
         source_page = source.new_page(width=800, height=1_000)
         source_page.insert_text((35, 100), "Building report: next inspection March 2027", fontsize=28)
@@ -1040,24 +1147,20 @@ class BuildingWorkflowTests(unittest.TestCase):
                 files={"file": ("scanned-report.pdf", pdf_bytes, "application/pdf")},
             )
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["extraction_method"], "vision")
+        self.assertEqual(response.json()["extraction_method"], "pdf")
         anthropic_blocks = anthropic_client.messages.create.call_args.kwargs["messages"][0]["content"]
-        self.assertTrue(any(block["type"] == "image" for block in anthropic_blocks))
+        document_block = next(block for block in anthropic_blocks if block["type"] == "document")
+        anthropic_pdf = base64.b64decode(document_block["source"]["data"])
+        with pymupdf.open(stream=anthropic_pdf, filetype="pdf") as sent_document:
+            self.assertEqual(sent_document.page_count, 1)
         anthropic_prompt = next(block["text"] for block in anthropic_blocks if block["type"] == "text")
-        self.assertIn("Do not rely on or reproduce any hidden", anthropic_prompt)
-        self.assertNotIn("bad embedded text layer", anthropic_prompt)
+        self.assertIn("Read the attached PDF directly", anthropic_prompt)
 
         os.environ["OPENAI_API_KEY"] = "test-key-not-sent"
         openai_client = SimpleNamespace(
-            chat=SimpleNamespace(
-                completions=SimpleNamespace(
-                    create=AsyncMock(
-                        return_value=SimpleNamespace(
-                            choices=[SimpleNamespace(
-                                message=SimpleNamespace(content=json.dumps(extraction))
-                            )]
-                        )
-                    )
+            responses=SimpleNamespace(
+                create=AsyncMock(
+                    return_value=SimpleNamespace(output_text=json.dumps(extraction))
                 )
             )
         )
@@ -1068,12 +1171,171 @@ class BuildingWorkflowTests(unittest.TestCase):
                 files={"file": ("scanned-report.pdf", pdf_bytes, "application/pdf")},
             )
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["extraction_method"], "vision")
-        openai_blocks = openai_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
-        self.assertTrue(any(block["type"] == "image_url" for block in openai_blocks))
+        self.assertEqual(response.json()["extraction_method"], "pdf")
+        openai_blocks = openai_client.responses.create.call_args.kwargs["input"][1]["content"]
+        pdf_input = next(block for block in openai_blocks if block["type"] == "input_file")
+        openai_pdf = base64.b64decode(pdf_input["file_data"].split(",", 1)[1])
+        with pymupdf.open(stream=openai_pdf, filetype="pdf") as sent_document:
+            self.assertEqual(sent_document.page_count, 1)
         openai_prompt = openai_blocks[0]["text"]
-        self.assertIn("attached PDF page images directly", openai_prompt)
-        self.assertNotIn("bad embedded text layer", openai_prompt)
+        self.assertIn("Read the attached PDF directly", openai_prompt)
+
+    def test_pdf_sent_to_ai_contains_at_most_the_first_eight_pages(self) -> None:
+        pdf = pymupdf.open()
+        for page_number in range(9):
+            page = pdf.new_page()
+            page.insert_text((40, 60), f"Page {page_number + 1}")
+        limited_pdf, original_page_count = module.pdf_prefix_for_ai(pdf.tobytes())
+        self.assertEqual(original_page_count, 9)
+        with pymupdf.open(stream=limited_pdf, filetype="pdf") as sent_document:
+            self.assertEqual(sent_document.page_count, 8)
+            self.assertIn("Page 1", sent_document[0].get_text())
+            self.assertIn("Page 8", sent_document[7].get_text())
+
+    def test_pdf_analysis_uses_pypdf_text_fallback_and_persists_skipped_results(self) -> None:
+        pdf = pymupdf.open()
+        page = pdf.new_page()
+        page.insert_text((40, 60), "Building name: Coburg Library\nAddress: Marktplatz 1")
+        pdf_bytes = pdf.tobytes()
+        empty_result = {
+            "fields": {},
+            "other_fields": [],
+            "maintenance_findings": [],
+        }
+        successful_result = {
+            "object_name": "Coburg Library",
+            "street_name": "Marktplatz",
+            "house_number": "1",
+            "fields": {"Heating system": "District heating"},
+            "other_fields": [],
+            "maintenance_findings": [],
+        }
+        fake_client = SimpleNamespace(
+            messages=SimpleNamespace(
+                create=AsyncMock(side_effect=[
+                    SimpleNamespace(content=[SimpleNamespace(type="text", text=json.dumps(empty_result))]),
+                    SimpleNamespace(content=[SimpleNamespace(type="text", text=json.dumps(successful_result))]),
+                ])
+            )
+        )
+        os.environ["ANTHROPIC_API_KEY"] = "test-key-not-sent"
+        with patch.object(module, "AsyncAnthropic", return_value=fake_client):
+            response = self.client.post(
+                "/api/extract",
+                data={"provider": "anthropic"},
+                files={"file": ("fallback.pdf", pdf_bytes, "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        extracted = response.json()
+        self.assertEqual(extracted["extraction_method"], "pypdf-fallback")
+        self.assertEqual(extracted["object_name"], "Coburg Library")
+        self.assertEqual(fake_client.messages.create.await_count, 2)
+        fallback_prompt = fake_client.messages.create.call_args_list[1].kwargs["messages"][0]["content"]
+        self.assertIn("Building name: Coburg Library", fallback_prompt)
+        self.assertTrue(extracted["ai_record_uid"])
+        with module.database() as connection:
+            record = connection.execute(
+                "SELECT record_type, building_id, payload_json FROM ai_generated_records WHERE uid = ?",
+                (extracted["ai_record_uid"],),
+            ).fetchone()
+        self.assertEqual(record["record_type"], "extraction")
+        self.assertIsNone(record["building_id"])
+        self.assertEqual(json.loads(record["payload_json"])["fields"]["Heating system"], "District heating")
+
+        saved = self.client.post(
+            "/api/buildings",
+            data={
+                "object_name": extracted["object_name"],
+                "building_code": extracted["building_code"],
+                "street_name": extracted["street_name"],
+                "house_number": extracted["house_number"],
+                "fields_json": json.dumps(extracted["fields"]),
+                "ai_record_uid": extracted["ai_record_uid"],
+            },
+            files={"file": ("fallback.pdf", pdf_bytes, "application/pdf")},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        with module.database() as connection:
+            linked_record = connection.execute(
+                "SELECT building_id FROM ai_generated_records WHERE uid = ?",
+                (extracted["ai_record_uid"],),
+            ).fetchone()
+        self.assertEqual(linked_record["building_id"], saved.json()["id"])
+
+    def test_chat_answers_are_saved_searchable_and_removed_by_clear_data(self) -> None:
+        os.environ["ANTHROPIC_API_KEY"] = "test-key-not-sent"
+        fake_client = SimpleNamespace(
+            messages=SimpleNamespace(
+                create=AsyncMock(
+                    return_value=SimpleNamespace(
+                        content=[SimpleNamespace(type="text", text="The boiler inspection is due in June 2027.")]
+                    )
+                )
+            )
+        )
+        with patch.object(module, "AsyncAnthropic", return_value=fake_client):
+            response = self.client.post(
+                "/api/agent/chat",
+                json={
+                    "provider": "anthropic",
+                    "messages": [{"role": "user", "content": "When is the boiler inspection due?"}],
+                },
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        saved_context, matched_count = module.search_saved_ai_records("boiler inspection")
+        self.assertEqual(matched_count, 1)
+        self.assertIn("June 2027", saved_context)
+
+        cleared = self.client.delete("/api/data")
+        self.assertEqual(cleared.status_code, 200, cleared.text)
+        self.assertEqual(cleared.json()["deleted_ai_records"], 1)
+        self.assertEqual(module.search_saved_ai_records("boiler inspection")[1], 0)
+
+    def test_initialize_database_replaces_legacy_ai_record_fts_triggers(self) -> None:
+        record_uid = module.save_ai_generated_record(
+            "chat",
+            "anthropic",
+            "test-model",
+            "",
+            {"reply": "Distinctive boiler inspection finding"},
+        )
+        with module.database() as connection:
+            connection.executescript(
+                """
+                DROP TRIGGER ai_generated_records_ad;
+                DROP TRIGGER ai_generated_records_au;
+                CREATE TRIGGER ai_generated_records_ad
+                    AFTER DELETE ON ai_generated_records BEGIN
+                    INSERT INTO ai_generated_records_fts
+                        (ai_generated_records_fts, rowid, search_text, source_file_name, record_type)
+                    VALUES ('delete', old.id, old.search_text, old.source_file_name, old.record_type);
+                END;
+                CREATE TRIGGER ai_generated_records_au
+                    AFTER UPDATE ON ai_generated_records BEGIN
+                    INSERT INTO ai_generated_records_fts
+                        (ai_generated_records_fts, rowid, search_text, source_file_name, record_type)
+                    VALUES ('delete', old.id, old.search_text, old.source_file_name, old.record_type);
+                    INSERT INTO ai_generated_records_fts
+                        (rowid, search_text, source_file_name, record_type)
+                    VALUES (new.id, new.search_text, new.source_file_name, new.record_type);
+                END;
+                """
+            )
+
+        module.initialize_database()
+        with module.database() as connection:
+            connection.execute(
+                "UPDATE ai_generated_records SET building_id = NULL WHERE uid = ?",
+                (record_uid,),
+            )
+        context, matched_count = module.search_saved_ai_records("Distinctive boiler inspection")
+        self.assertEqual(matched_count, 1)
+        self.assertIn("Distinctive boiler inspection finding", context)
+
+        with module.database() as connection:
+            connection.execute("DELETE FROM ai_generated_records WHERE uid = ?", (record_uid,))
+        self.assertEqual(module.search_saved_ai_records("Distinctive boiler inspection")[1], 0)
 
     def test_agent_database_context_marks_records_beyond_limit_as_truncated(self) -> None:
         with module.database() as connection:
@@ -1118,10 +1380,18 @@ class BuildingWorkflowTests(unittest.TestCase):
         image_bytes = base64.b64decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQmcAAAAASUVORK5CYII="
         )
+        photo_pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 240, 180), False)
+        photo_pixmap.clear_with(120)
+        photo_bytes = photo_pixmap.tobytes("png")
+        page_image_pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 400, 600), False)
+        page_image_pixmap.clear_with(180)
+        page_image_bytes = page_image_pixmap.tobytes("png")
         document = pymupdf.open()
         page = document.new_page()
         page.insert_text((40, 40), "Floor plan")
-        page.insert_image(pymupdf.Rect(50, 60, 120, 130), stream=image_bytes)
+        page.insert_image(pymupdf.Rect(50, 60, 250, 230), stream=photo_bytes)
+        page.insert_image(page.rect, stream=page_image_bytes)
+        page.insert_image(pymupdf.Rect(500, 60, 501, 61), stream=image_bytes)
         pdf_bytes = document.tobytes()
 
         saved = self.client.post(
@@ -1138,6 +1408,11 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertEqual(saved.json()["plan_page_count"], 1)
         self.assertEqual(saved.json()["embedded_image_count"], 1)
 
+        with module.database() as connection:
+            connection.execute(
+                "UPDATE document_index_state SET asset_version = 0 WHERE source_key = ?",
+                (f"building:{building_id}",),
+            )
         assets = self.client.get(f"/api/buildings/{building_id}/assets").json()["assets"]
         self.assertEqual({asset["asset_type"] for asset in assets}, {"floorplan-page", "embedded-image"})
         extracted_image = next(asset for asset in assets if asset["asset_type"] == "embedded-image")
