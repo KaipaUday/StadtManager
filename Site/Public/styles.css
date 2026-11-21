@@ -630,3 +630,8 @@ body.dark .calendar-day:hover { border-color: #3f5a49; }
 body.dark .calendar-chip.maintenance { color: #f0b5ad; background: #4a2a26; }
 body.dark .calendar-chip.suggested { color: #ecd09f; background: #44361f; }
 body.dark .calendar-chip.event { color: #b4d4f2; background: #23384c; }
+
+/* 3D-Campusmodell Plattenäcker */
+.twin-viewer.campus-mode { display: block; height: min(70vh, 620px); min-height: 480px; padding: 0; text-align: left; font-size: 14px; color: inherit; }
+.twin-viewer.campus-mode .ct-root { border-radius: 8px; }
+body.dark .twin-viewer.campus-mode .ct-side, body.dark .twin-viewer.campus-mode .ct-info { color: #1d2433; }
