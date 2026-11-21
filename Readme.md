@@ -1,7 +1,7 @@
 # StadtManager
 
 ## Run locally
-
+On Windows
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -51,6 +51,47 @@ directly through the environment instead:
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m uvicorn app:app --app-dir Site --reload
 ```
+## Environment variables
+
+Replace placeholders with your own credentials. Never commit real secrets to
+the repository or paste them into source code.
+
+### For the current terminal only
+
+```bash
+export OPENAI_API_KEY="your-openai-api-key"
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
+export STADTMANAGER_MAX_UPLOAD_MB="100"
+export STADTMANAGER_MAX_PDF_PAGES="500"
+export OCR_LANGUAGES="deu+eng"
+
+# Optional database settings for future database-backed features
+export DB_HOST="localhost"
+export DB_PORT="5432"
+export DB_NAME="your-database-name"
+export DB_USER="your-database-user"
+export DB_PASSWORD="your-database-password"
+```
+
+### Persist on macOS (zsh)
+
+Add the same `export` lines to `~/.zshrc` using a text editor:
+
+```bash
+nano ~/.zshrc
+```
+
+Save and close the editor, then load the settings into the current terminal:
+
+```bash
+source ~/.zshrc
+```
+
+New terminal windows will load these settings automatically. The current app
+uses local SQLite, so the `DB_*` examples aren't used. Set
+`STADTMANAGER_DB_PATH` if you want to store the SQLite database at a different
+local path.
+
 
 ## Supported file types
 
@@ -229,43 +270,3 @@ curl --fail-with-body --silent --show-error --get http://127.0.0.1:8000/api/mode
 Use `provider=openai` to check the OpenAI key instead. A successful response
 includes the available model IDs; an invalid or missing key returns an error.
 
-## Environment variables
-
-Replace placeholders with your own credentials. Never commit real secrets to
-the repository or paste them into source code.
-
-### For the current terminal only
-
-```bash
-export OPENAI_API_KEY="your-openai-api-key"
-export ANTHROPIC_API_KEY="your-anthropic-api-key"
-export STADTMANAGER_MAX_UPLOAD_MB="100"
-export STADTMANAGER_MAX_PDF_PAGES="500"
-export OCR_LANGUAGES="deu+eng"
-
-# Optional database settings for future database-backed features
-export DB_HOST="localhost"
-export DB_PORT="5432"
-export DB_NAME="your-database-name"
-export DB_USER="your-database-user"
-export DB_PASSWORD="your-database-password"
-```
-
-### Persist on macOS (zsh)
-
-Add the same `export` lines to `~/.zshrc` using a text editor:
-
-```bash
-nano ~/.zshrc
-```
-
-Save and close the editor, then load the settings into the current terminal:
-
-```bash
-source ~/.zshrc
-```
-
-New terminal windows will load these settings automatically. The current app
-uses local SQLite, so the `DB_*` examples aren't used. Set
-`STADTMANAGER_DB_PATH` if you want to store the SQLite database at a different
-local path.
