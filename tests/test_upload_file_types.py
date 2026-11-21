@@ -9,7 +9,10 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+<<<<<<< HEAD
 from types import SimpleNamespace
+=======
+>>>>>>> origin/master
 
 ROOT = Path(__file__).resolve().parents[1]
 for path in (ROOT, ROOT / "tests"):
@@ -39,7 +42,10 @@ class UploadFileTypeTests(unittest.TestCase):
         self.database_directory = tempfile.TemporaryDirectory(prefix="stadtmanager-types-")
         module.DB_PATH = Path(self.database_directory.name) / "test.sqlite3"
         module.initialize_database()
+<<<<<<< HEAD
         self.request = SimpleNamespace(state=SimpleNamespace(user={"role": module.ROLE_CITY_ADMIN}))
+=======
+>>>>>>> origin/master
         self.previous_keys = {
             name: os.environ.pop(name, None) for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
         }
@@ -56,7 +62,10 @@ class UploadFileTypeTests(unittest.TestCase):
         self.house_number += 1
         tasks = BackgroundTasks()
         result = asyncio.run(module.save_building(
+<<<<<<< HEAD
             self.request,
+=======
+>>>>>>> origin/master
             tasks,
             upload(filename, raw),
             object_name=f"Test {filename}",
@@ -107,9 +116,13 @@ class UploadFileTypeTests(unittest.TestCase):
 
     def test_binary_cad_files_are_stored_for_manual_review(self) -> None:
         raw = b"AC1032" + bytes(512)
+<<<<<<< HEAD
         extracted = asyncio.run(module.extract_document(
             self.request, upload("plan.dwg", raw), provider="anthropic", model=""
         ))
+=======
+        extracted = asyncio.run(module.extract_document(upload("plan.dwg", raw), provider="anthropic", model=""))
+>>>>>>> origin/master
         self.assertEqual(extracted["kind"], "CAD drawing (DWG)")
         self.assertIn("DWG drawings are saved", extracted["extraction_error"])
         saved = self.save("plan.dwg", raw)
@@ -127,7 +140,11 @@ class UploadFileTypeTests(unittest.TestCase):
 
     def test_uploaded_html_is_downloaded_not_rendered(self) -> None:
         saved = self.save("seite.html", b"<script>alert(document.cookie)</script><p>Rathaus</p>")
+<<<<<<< HEAD
         response = asyncio.run(module.get_building_file(saved["id"], self.request))
+=======
+        response = asyncio.run(module.get_building_file(saved["id"]))
+>>>>>>> origin/master
         self.assertEqual(response.media_type, "application/octet-stream")
         self.assertTrue(response.headers["content-disposition"].startswith("attachment"))
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
@@ -152,9 +169,15 @@ class UploadFileTypeTests(unittest.TestCase):
                 self.assertTrue(module.image_to_pdf(raw, Path(filename).suffix).startswith(b"%PDF"))
 
         saved = self.save("plan.png", png)
+<<<<<<< HEAD
         assets = asyncio.run(module.get_building_assets(saved["id"], self.request))["assets"]
         self.assertEqual([asset["asset_type"] for asset in assets], ["floorplan-page"])
         response = asyncio.run(module.get_building_file(saved["id"], self.request))
+=======
+        assets = asyncio.run(module.get_building_assets(saved["id"]))["assets"]
+        self.assertEqual([asset["asset_type"] for asset in assets], ["floorplan-page"])
+        response = asyncio.run(module.get_building_file(saved["id"]))
+>>>>>>> origin/master
         self.assertEqual(response.media_type, "image/png")
 
     @unittest.skipUnless(HAS_PYMUPDF, "PyMuPDF is required for images")

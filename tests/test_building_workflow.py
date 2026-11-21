@@ -26,6 +26,7 @@ class BuildingWorkflowTests(unittest.TestCase):
         module.DB_PATH = Path(self.database_directory.name) / "test.sqlite3"
         module.initialize_database()
         self.client = TestClient(module.app)
+<<<<<<< HEAD
         setup = self.client.post(
             "/api/auth/setup",
             json={
@@ -35,6 +36,8 @@ class BuildingWorkflowTests(unittest.TestCase):
             },
         )
         self.assertEqual(setup.status_code, 200, setup.text)
+=======
+>>>>>>> origin/master
         self.previous_keys = {
             name: os.environ.pop(name, None)
             for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
@@ -48,6 +51,7 @@ class BuildingWorkflowTests(unittest.TestCase):
                 os.environ[name] = value
         self.database_directory.cleanup()
 
+<<<<<<< HEAD
     def test_authentication_bootstrap_login_and_logout(self) -> None:
         unauthenticated = TestClient(module.app)
         self.assertEqual(unauthenticated.get("/api/buildings").status_code, 401)
@@ -295,6 +299,8 @@ class BuildingWorkflowTests(unittest.TestCase):
         building_admin_client.close()
         employee_client.close()
 
+=======
+>>>>>>> origin/master
     def test_extract_review_and_save_persists_file_and_categories(self) -> None:
         os.environ["ANTHROPIC_API_KEY"] = "test-key-not-sent"
         extraction = {

@@ -46,12 +46,20 @@ const state = {
   locationPickedManually: false,
   pickedLocationMarker: null,
   language: "en",
+<<<<<<< HEAD
   user: null,
   adminUsers: [],
   authMode: "login",
   profile: null,
   pendingProfileImage: null,
   profileImageRemoved: false,
+=======
+  calendar: (() => {
+    const now = new Date();
+    const selected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    return { year: now.getFullYear(), monthIndex: now.getMonth(), selected, events: [] };
+  })(),
+>>>>>>> origin/master
 };
 sendButton.disabled = true;
 
@@ -171,6 +179,38 @@ const translations = {
     twinSource: "PDF source document",
     generateTwin: "Generate 3D draft",
     saveTwin: "Save reviewed model",
+<<<<<<< HEAD
+=======
+    calendar: "Calendar",
+    calendarKicker: "SCHEDULE",
+    calendarTitle: "Maintenance calendar",
+    calendarCopy: "Due dates from maintenance alerts and your team's appointments in one place.",
+    nextDue: "Jump to next maintenance",
+    prevMonth: "Previous month",
+    nextMonth: "Next month",
+    monthLabel: "Month",
+    yearLabel: "Year",
+    today: "Today",
+    legendMaintenance: "Maintenance due",
+    legendSuggested: "Maintenance, needs review",
+    legendEvent: "Appointment",
+    addEvent: "Add appointment",
+    eventTitle: "Title",
+    eventDate: "Date",
+    eventTime: "Time (optional)",
+    eventNote: "Note (optional)",
+    saveEvent: "Save appointment",
+    noEntriesDay: "Nothing scheduled for this day.",
+    noUpcoming: "No upcoming maintenance with a due date.",
+    moreEntries: "+{count} more",
+    deleteEvent: "Delete appointment",
+    confirmDeleteEvent: "Delete this appointment for everyone?",
+    eventSaved: "Appointment saved.",
+    eventDeleted: "Appointment deleted.",
+    eventSaveError: "Could not save the appointment.",
+    eventDeleteError: "Could not delete the appointment.",
+    calendarLoadError: "Could not load the calendar.",
+>>>>>>> origin/master
     footerTagline: "A clearer view of your city",
     footerBuilt: "Built for thoughtful decisions.",
   },
@@ -269,6 +309,38 @@ const translations = {
     twinSource: "PDF-Quelldokument",
     generateTwin: "3D-Entwurf erstellen",
     saveTwin: "Geprüftes Modell speichern",
+<<<<<<< HEAD
+=======
+    calendar: "Kalender",
+    calendarKicker: "TERMINE",
+    calendarTitle: "Wartungskalender",
+    calendarCopy: "Fälligkeiten aus den Wartungsmeldungen und Termine Ihres Teams an einem Ort.",
+    nextDue: "Zur nächsten fälligen Wartung",
+    prevMonth: "Vorheriger Monat",
+    nextMonth: "Nächster Monat",
+    monthLabel: "Monat",
+    yearLabel: "Jahr",
+    today: "Heute",
+    legendMaintenance: "Wartung fällig",
+    legendSuggested: "Wartung, Prüfung erforderlich",
+    legendEvent: "Termin",
+    addEvent: "Termin hinzufügen",
+    eventTitle: "Titel",
+    eventDate: "Datum",
+    eventTime: "Uhrzeit (optional)",
+    eventNote: "Notiz (optional)",
+    saveEvent: "Termin speichern",
+    noEntriesDay: "An diesem Tag ist nichts eingetragen.",
+    noUpcoming: "Keine anstehende Wartung mit Fälligkeitsdatum.",
+    moreEntries: "+{count} weitere",
+    deleteEvent: "Termin löschen",
+    confirmDeleteEvent: "Diesen Termin für alle löschen?",
+    eventSaved: "Termin gespeichert.",
+    eventDeleted: "Termin gelöscht.",
+    eventSaveError: "Der Termin konnte nicht gespeichert werden.",
+    eventDeleteError: "Der Termin konnte nicht gelöscht werden.",
+    calendarLoadError: "Der Kalender konnte nicht geladen werden.",
+>>>>>>> origin/master
     footerTagline: "Ihre Stadt im klaren Überblick",
     footerBuilt: "Für fundierte Entscheidungen entwickelt.",
   },
@@ -301,10 +373,13 @@ function applyLanguage(language) {
     "aria-label",
     language === "en" ? "Zur deutschen Oberfläche wechseln" : "Switch to English interface",
   );
+<<<<<<< HEAD
   if (state.user) {
     document.querySelector("#profile-name").textContent = state.user.display_name;
     document.querySelector("#profile-role").textContent = roleLabel(state.user.role);
   }
+=======
+>>>>>>> origin/master
   if (state.currentImport) {
     document.querySelector("#preview-kind").textContent = previewKindLabel(
       state.currentExtraction?.kind || fileExtension(state.currentImport.name).toUpperCase(),
@@ -312,6 +387,7 @@ function applyLanguage(language) {
     );
   }
   renderMaintenanceOverview();
+<<<<<<< HEAD
 }
 
 function roleLabel(role) {
@@ -357,6 +433,9 @@ function renderProfileImage(imageData, name, profileOnly = false) {
     if (imageData) image.src = imageData;
     else image.removeAttribute("src");
   }
+=======
+  renderCalendar();
+>>>>>>> origin/master
 }
 
 function showToast(message) {
@@ -1198,7 +1277,10 @@ async function renderTwin(twin, buildingId = state.activeBuildingId) {
         const input = document.createElement("input");
         input.type = type;
         input.value = room[field];
+<<<<<<< HEAD
         input.disabled = state.user?.role === "employee";
+=======
+>>>>>>> origin/master
         input.dataset.twinFloor = floorIndex;
         input.dataset.twinRoom = roomIndex;
         input.dataset.twinField = field;
@@ -1373,7 +1455,10 @@ function renderMaintenanceCards(container, items, emptyMessage) {
       addAction("dismiss", "Dismiss");
     }
     card.append(actions);
+<<<<<<< HEAD
     if (state.user?.role === "employee") actions.hidden = true;
+=======
+>>>>>>> origin/master
     container.append(card);
   }
 }
@@ -1399,6 +1484,10 @@ async function loadMaintenance() {
     if (!response.ok) throw new Error(result.detail || "Could not load maintenance alerts.");
     state.maintenance = result.items || [];
     renderMaintenanceOverview();
+<<<<<<< HEAD
+=======
+    renderCalendar();
+>>>>>>> origin/master
   } catch (error) {
     showToast(error.message || "Could not load maintenance alerts.");
   }
@@ -1435,6 +1524,7 @@ async function updateMaintenanceItem(itemId, action) {
   }
 }
 
+<<<<<<< HEAD
 function addBuildingEditField(name = "", value = "") {
   const row = document.createElement("div");
   row.className = "building-edit-row";
@@ -1458,6 +1548,8 @@ function addBuildingEditField(name = "", value = "") {
   document.querySelector("#building-edit-fields").append(row);
 }
 
+=======
+>>>>>>> origin/master
 async function openBuildingDetails(buildingId) {
   const building = state.buildings.find((record) => record.id === buildingId);
   if (!building) return;
@@ -1469,6 +1561,7 @@ async function openBuildingDetails(buildingId) {
   document.querySelector("#building-detail-address").textContent = building.address || "No address recorded";
   document.querySelector("#building-detail-uid").textContent =
     `${translations[state.language].buildingCode}: ${building.building_code} · ${translations[state.language].systemUid}: ${building.uid}`;
+<<<<<<< HEAD
   const propertyList = document.querySelector("#building-property-list");
   const properties = Object.entries(building.fields || {});
   const editable = state.user?.role !== "employee";
@@ -1493,6 +1586,8 @@ async function openBuildingDetails(buildingId) {
       return item;
     }));
   }
+=======
+>>>>>>> origin/master
   document.querySelector("#building-detail-warning").hidden = true;
   document.querySelector("#building-image-gallery").textContent = "Loading PDF images…";
   document.querySelector("#building-image-count").textContent = "";
@@ -1506,8 +1601,11 @@ async function openBuildingDetails(buildingId) {
   document.querySelector("#save-twin").hidden = true;
   const generateButton = document.querySelector("#generate-twin");
   generateButton.disabled = true;
+<<<<<<< HEAD
   generateButton.hidden = state.user?.role === "employee";
   document.querySelector("#save-twin").hidden = true;
+=======
+>>>>>>> origin/master
   generateButton.textContent = "Loading PDF files…";
   if (!dialog.open) dialog.showModal();
   clearTwinViewer();
@@ -1719,7 +1817,10 @@ async function loadBuildings() {
     state.processedCount = state.buildings.length;
     renderFiles();
     renderBuildings();
+<<<<<<< HEAD
     if (state.user?.role === "city_administrator" && state.adminUsers.length) renderAdminUsers();
+=======
+>>>>>>> origin/master
   } catch (error) {
     showToast(error.message || "Could not load saved buildings.");
   }
@@ -1872,6 +1973,7 @@ async function loadModels() {
   }
 }
 
+<<<<<<< HEAD
 function populateBuildingSelect(select, selectedIds = []) {
   const selected = new Set(selectedIds.map(Number));
   select.replaceChildren(...state.buildings.map((building) => {
@@ -2114,6 +2216,8 @@ async function initializeAuthentication() {
   }
 }
 
+=======
+>>>>>>> origin/master
 fileInput.addEventListener("change", () => queueFiles([...fileInput.files]));
 folderInput.addEventListener("change", () => queueFiles([...folderInput.files]));
 document.querySelector("#browse-files").addEventListener("click", () => fileInput.click());
@@ -2255,6 +2359,7 @@ if (localStorage.getItem("stadtmanager-theme") === "dark") document.body.classLi
 document.querySelector("#language-toggle").addEventListener("click", () => {
   applyLanguage(state.language === "en" ? "de" : "en");
 });
+<<<<<<< HEAD
 document.querySelectorAll(".nav-item").forEach((link) => {
   link.addEventListener("click", (event) => {
     const page = link.dataset.workspacePage;
@@ -2390,6 +2495,8 @@ document.querySelector("#profile-form").addEventListener("submit", async (event)
     button.disabled = false;
   }
 });
+=======
+>>>>>>> origin/master
 document.querySelector("#clear-data").addEventListener("click", async () => {
   const message = state.language === "de"
     ? "Alle gespeicherten Gebäude, Dateien, Wartungsmeldungen und 3D-Modelle unwiderruflich löschen?"
@@ -2406,6 +2513,10 @@ document.querySelector("#clear-data").addEventListener("click", async () => {
     renderFiles();
     renderBuildings();
     renderMaintenanceOverview();
+<<<<<<< HEAD
+=======
+    renderCalendar();
+>>>>>>> origin/master
     showToast(state.language === "de"
       ? `${result.deleted_buildings} Gebäude und alle zugehörigen Daten gelöscht.`
       : `${result.deleted_buildings} buildings and all related data deleted.`);
@@ -2413,6 +2524,7 @@ document.querySelector("#clear-data").addEventListener("click", async () => {
     showToast(error.message || "Could not clear saved data.");
   }
 });
+<<<<<<< HEAD
 document.querySelector("#sign-out").addEventListener("click", async () => {
   try {
     const response = await fetch("/api/auth/logout", { method: "POST" });
@@ -2475,11 +2587,296 @@ document.querySelector("#auth-form").addEventListener("submit", async (event) =>
   document.querySelector("#auth-message").textContent = "";
   try {
     const response = await fetch(isSetup ? "/api/auth/setup" : "/api/auth/login", {
+=======
+
+
+// ---------- Calendar ----------
+
+const calendarElements = {
+  nav: document.querySelector("#calendar-nav"),
+  monthLabel: document.querySelector("#calendar-month-label"),
+  monthSelect: document.querySelector("#calendar-month-select"),
+  yearSelect: document.querySelector("#calendar-year-select"),
+  weekdays: document.querySelector("#calendar-weekdays"),
+  grid: document.querySelector("#calendar-grid"),
+  dayTitle: document.querySelector("#calendar-day-title"),
+  dayList: document.querySelector("#calendar-day-list"),
+  form: document.querySelector("#calendar-event-form"),
+  titleInput: document.querySelector("#calendar-event-title"),
+  dateInput: document.querySelector("#calendar-event-date"),
+  timeInput: document.querySelector("#calendar-event-time"),
+  noteInput: document.querySelector("#calendar-event-note"),
+};
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function isoFromParts(year, monthIndex, day) {
+  return `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+}
+
+function todayIso() {
+  const now = new Date();
+  return isoFromParts(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function calendarLocale() {
+  return state.language === "de" ? "de-DE" : "en-GB";
+}
+
+function calendarText(key) {
+  return translations[state.language][key] || translations.en[key] || key;
+}
+
+function parseIsoDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || "");
+  if (!match) return null;
+  return { year: Number(match[1]), monthIndex: Number(match[2]) - 1, day: Number(match[3]), iso: match[0] };
+}
+
+function formatLongDate(iso) {
+  const parts = parseIsoDate(iso);
+  if (!parts) return iso;
+  return new Intl.DateTimeFormat(calendarLocale(), {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  }).format(new Date(parts.year, parts.monthIndex, parts.day));
+}
+
+// All entries (maintenance due dates + appointments) grouped by ISO date.
+function calendarEntriesByDate() {
+  const byDate = new Map();
+  const add = (iso, entry) => {
+    if (!byDate.has(iso)) byDate.set(iso, []);
+    byDate.get(iso).push(entry);
+  };
+  for (const item of state.maintenance) {
+    const parts = parseIsoDate(item.due_date);
+    if (!parts) continue;
+    add(parts.iso, {
+      kind: item.status === "suggested" ? "suggested" : "maintenance",
+      title: item.title,
+      subtitle: [item.object_name, item.address].filter(Boolean).join(" · "),
+      severity: item.severity,
+      buildingId: item.building_id,
+      sortKey: "0",
+    });
+  }
+  for (const event of state.calendar.events) {
+    const parts = parseIsoDate(event.event_date);
+    if (!parts) continue;
+    add(parts.iso, {
+      kind: "event",
+      id: event.id,
+      title: event.title,
+      time: event.event_time || "",
+      note: event.note || "",
+      sortKey: `1${event.event_time || "99:99"}`,
+    });
+  }
+  for (const entries of byDate.values()) entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  return byDate;
+}
+
+function fillCalendarSelects(entriesByDate) {
+  const monthFormatter = new Intl.DateTimeFormat(calendarLocale(), { month: "long" });
+  calendarElements.monthSelect.replaceChildren(
+    ...Array.from({ length: 12 }, (_, monthIndex) => {
+      const option = document.createElement("option");
+      option.value = String(monthIndex);
+      option.textContent = monthFormatter.format(new Date(2024, monthIndex, 1));
+      return option;
+    }),
+  );
+  const currentYear = new Date().getFullYear();
+  const entryYears = [...entriesByDate.keys()].map((iso) => Number(iso.slice(0, 4)));
+  const firstYear = Math.min(currentYear - 5, state.calendar.year, ...entryYears);
+  const lastYear = Math.max(currentYear + 15, state.calendar.year, ...entryYears);
+  calendarElements.yearSelect.replaceChildren(
+    ...Array.from({ length: lastYear - firstYear + 1 }, (_, index) => {
+      const option = document.createElement("option");
+      option.value = String(firstYear + index);
+      option.textContent = String(firstYear + index);
+      return option;
+    }),
+  );
+  calendarElements.monthSelect.value = String(state.calendar.monthIndex);
+  calendarElements.yearSelect.value = String(state.calendar.year);
+}
+
+function renderCalendar() {
+  if (!state.calendar || !calendarElements.grid) return;
+  const { year, monthIndex } = state.calendar;
+  const entriesByDate = calendarEntriesByDate();
+  const today = todayIso();
+
+  calendarElements.monthLabel.textContent = new Intl.DateTimeFormat(calendarLocale(), {
+    month: "long", year: "numeric",
+  }).format(new Date(year, monthIndex, 1));
+  fillCalendarSelects(entriesByDate);
+
+  const weekdayFormatter = new Intl.DateTimeFormat(calendarLocale(), { weekday: "short" });
+  calendarElements.weekdays.replaceChildren(
+    ...Array.from({ length: 7 }, (_, index) => {
+      const cell = document.createElement("span");
+      cell.textContent = weekdayFormatter.format(new Date(2024, 0, 1 + index)); // 1 Jan 2024 = Monday
+      return cell;
+    }),
+  );
+
+  // Weeks start on Monday; show leading/trailing days of neighbouring months.
+  const firstWeekday = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const cellCount = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+  const cells = [];
+  for (let index = 0; index < cellCount; index += 1) {
+    const cellDate = new Date(year, monthIndex, 1 - firstWeekday + index);
+    const iso = isoFromParts(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+    const outside = cellDate.getMonth() !== monthIndex;
+    const entries = entriesByDate.get(iso) || [];
+
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "calendar-day";
+    cell.setAttribute("role", "gridcell");
+    if (outside) cell.classList.add("outside");
+    if (iso === today) cell.classList.add("today");
+    if (iso === state.calendar.selected) cell.classList.add("selected");
+    cell.setAttribute("aria-label", `${formatLongDate(iso)}${entries.length ? ` · ${entries.length}` : ""}`);
+    cell.addEventListener("click", () => selectCalendarDay(iso));
+
+    const number = document.createElement("span");
+    number.className = "calendar-day-number";
+    number.textContent = String(cellDate.getDate());
+    cell.append(number);
+
+    const maxChips = 3;
+    for (const entry of entries.slice(0, maxChips)) {
+      const chip = document.createElement("span");
+      chip.className = `calendar-chip ${entry.kind}`;
+      chip.textContent = entry.time ? `${entry.time} ${entry.title}` : entry.title;
+      cell.append(chip);
+    }
+    if (entries.length > maxChips) {
+      const more = document.createElement("span");
+      more.className = "calendar-more";
+      more.textContent = calendarText("moreEntries").replace("{count}", String(entries.length - maxChips));
+      cell.append(more);
+    }
+    cells.push(cell);
+  }
+  calendarElements.grid.replaceChildren(...cells);
+  renderCalendarDay(entriesByDate);
+}
+
+function renderCalendarDay(entriesByDate = calendarEntriesByDate()) {
+  const iso = state.calendar.selected;
+  calendarElements.dayTitle.textContent = formatLongDate(iso);
+  const entries = entriesByDate.get(iso) || [];
+  calendarElements.dayList.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "maintenance-empty";
+    empty.textContent = calendarText("noEntriesDay");
+    calendarElements.dayList.append(empty);
+  }
+  for (const entry of entries) {
+    const item = document.createElement("article");
+    item.className = `calendar-entry ${entry.kind}`;
+    const label = document.createElement("span");
+    label.className = "calendar-entry-kind";
+    label.textContent = entry.kind === "event"
+      ? `${calendarText("legendEvent")}${entry.time ? ` · ${entry.time}` : ""}`
+      : `${entry.kind === "suggested" ? calendarText("legendSuggested") : calendarText("legendMaintenance")} · ${entry.severity}`;
+    const title = document.createElement("strong");
+    title.textContent = entry.title;
+    item.append(label, title);
+    if (entry.kind === "event") {
+      if (entry.note) {
+        const note = document.createElement("p");
+        note.textContent = entry.note;
+        item.append(note);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "maintenance-action";
+      remove.textContent = calendarText("deleteEvent");
+      remove.addEventListener("click", () => deleteCalendarEvent(entry.id));
+      item.append(remove);
+    } else {
+      const link = document.createElement("button");
+      link.type = "button";
+      link.className = "maintenance-building-link";
+      link.textContent = entry.subtitle || calendarText("building");
+      link.addEventListener("click", () => openBuildingDetails(entry.buildingId));
+      item.append(link);
+    }
+    calendarElements.dayList.append(item);
+  }
+  calendarElements.dateInput.value = iso;
+}
+
+function showCalendarMonth(year, monthIndex) {
+  const normalized = new Date(year, monthIndex, 1);
+  state.calendar.year = normalized.getFullYear();
+  state.calendar.monthIndex = normalized.getMonth();
+  renderCalendar();
+}
+
+function selectCalendarDay(iso) {
+  const parts = parseIsoDate(iso);
+  if (!parts) return;
+  state.calendar.selected = parts.iso;
+  showCalendarMonth(parts.year, parts.monthIndex);
+}
+
+function showCurrentMonth() {
+  selectCalendarDay(todayIso());
+}
+
+function jumpToNextMaintenance() {
+  const today = todayIso();
+  const upcoming = state.maintenance
+    .map((item) => parseIsoDate(item.due_date)?.iso)
+    .filter((iso) => iso && iso >= today)
+    .sort();
+  if (!upcoming.length) {
+    showToast(calendarText("noUpcoming"));
+    return;
+  }
+  selectCalendarDay(upcoming[0]);
+}
+
+async function loadCalendarEvents() {
+  try {
+    const response = await fetch("/api/calendar/events");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || calendarText("calendarLoadError"));
+    state.calendar.events = result.events || [];
+    renderCalendar();
+  } catch (error) {
+    showToast(error.message || calendarText("calendarLoadError"));
+  }
+}
+
+async function addCalendarEvent(event) {
+  event.preventDefault();
+  const payload = {
+    title: calendarElements.titleInput.value.trim(),
+    event_date: calendarElements.dateInput.value,
+    event_time: calendarElements.timeInput.value || null,
+    note: calendarElements.noteInput.value.trim(),
+  };
+  if (!payload.title || !payload.event_date) return;
+  try {
+    const response = await fetch("/api/calendar/events", {
+>>>>>>> origin/master
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     const result = await response.json();
+<<<<<<< HEAD
     if (!response.ok) throw new Error(result.detail || "Authentication failed.");
     await startAuthenticatedApp(result.user);
   } catch (error) {
@@ -2516,6 +2913,56 @@ document.querySelector("#admin-user-form").addEventListener("submit", async (eve
     button.disabled = false;
   }
 });
+=======
+    if (!response.ok) {
+      const detail = Array.isArray(result.detail) ? result.detail.map((item) => item.msg).join(" ") : result.detail;
+      throw new Error(detail || calendarText("eventSaveError"));
+    }
+    calendarElements.titleInput.value = "";
+    calendarElements.timeInput.value = "";
+    calendarElements.noteInput.value = "";
+    state.calendar.events.push(result);
+    selectCalendarDay(result.event_date);
+    showToast(calendarText("eventSaved"));
+  } catch (error) {
+    showToast(error.message || calendarText("eventSaveError"));
+  }
+}
+
+async function deleteCalendarEvent(eventId) {
+  if (!window.confirm(calendarText("confirmDeleteEvent"))) return;
+  try {
+    const response = await fetch(`/api/calendar/events/${eventId}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || calendarText("eventDeleteError"));
+    state.calendar.events = state.calendar.events.filter((item) => item.id !== eventId);
+    renderCalendar();
+    showToast(calendarText("eventDeleted"));
+  } catch (error) {
+    showToast(error.message || calendarText("eventDeleteError"));
+  }
+}
+
+calendarElements.nav.addEventListener("click", () => {
+  showCurrentMonth();
+  loadCalendarEvents(); // pick up appointments other people added meanwhile
+});
+document.querySelector("#calendar-prev").addEventListener("click", () => {
+  showCalendarMonth(state.calendar.year, state.calendar.monthIndex - 1);
+});
+document.querySelector("#calendar-next").addEventListener("click", () => {
+  showCalendarMonth(state.calendar.year, state.calendar.monthIndex + 1);
+});
+document.querySelector("#calendar-today").addEventListener("click", showCurrentMonth);
+document.querySelector("#calendar-next-due").addEventListener("click", jumpToNextMaintenance);
+calendarElements.monthSelect.addEventListener("change", () => {
+  showCalendarMonth(state.calendar.year, Number(calendarElements.monthSelect.value));
+});
+calendarElements.yearSelect.addEventListener("change", () => {
+  showCalendarMonth(Number(calendarElements.yearSelect.value), state.calendar.monthIndex);
+});
+calendarElements.form.addEventListener("submit", addCalendarEvent);
+>>>>>>> origin/master
 
 const savedLanguage = localStorage.getItem("stadtmanager-language");
 const browserLanguage = (navigator.language || "en").toLowerCase().startsWith("de") ? "de" : "en";
@@ -2533,4 +2980,13 @@ fetch("/api/health")
     document.querySelector(".status-dot").classList.add("offline");
   });
 
+<<<<<<< HEAD
 initializeAuthentication();
+=======
+loadModels();
+loadCategories();
+loadBuildings();
+loadMaintenance();
+loadCalendarEvents();
+initializeCityMap();
+>>>>>>> origin/master

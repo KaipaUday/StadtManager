@@ -1,18 +1,27 @@
 import base64
 import csv
+<<<<<<< HEAD
 import hashlib
 import hmac
+=======
+>>>>>>> origin/master
 import re
 import io
 import json
 import logging
 import math
 import os
+<<<<<<< HEAD
 import secrets
 import shutil
 import sqlite3
 import threading
 import time
+=======
+import shutil
+import sqlite3
+import threading
+>>>>>>> origin/master
 import unicodedata
 import uuid
 from contextlib import contextmanager
@@ -24,8 +33,13 @@ from urllib.request import Request, urlopen
 
 import anthropic
 from anthropic import AsyncAnthropic
+<<<<<<< HEAD
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request as FastAPIRequest, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
+=======
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, Response
+>>>>>>> origin/master
 from openai import AsyncOpenAI
 from openai import APIError as OpenAIAPIError
 import pymupdf
@@ -60,7 +74,10 @@ MAX_TWIN_PDF_PAGES = 8
 MAX_TWIN_IMAGES = 20
 MAX_TWIN_IMAGE_BYTES = 1_500_000
 MAX_TWIN_TOTAL_IMAGE_BYTES = 12 * 1024 * 1024
+<<<<<<< HEAD
 MAX_PROFILE_IMAGE_BYTES = 1024 * 1024
+=======
+>>>>>>> origin/master
 ALLOWED_EXTENSIONS = set(file_formats.SUPPORTED_EXTENSIONS)
 IMAGE_EXTENSIONS = set(file_formats.IMAGE_EXTENSIONS)
 RENDERABLE_MIME_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/gif", "image/tiff"}
@@ -69,12 +86,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="StadtManager")
+<<<<<<< HEAD
 SESSION_COOKIE = "stadtmanager_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 14
 PASSWORD_HASH_ROUNDS = 240_000
 ROLE_CITY_ADMIN = "city_administrator"
 ROLE_BUILDING_ADMIN = "building_administrator"
 ROLE_EMPLOYEE = "employee"
+=======
+>>>>>>> origin/master
 
 
 @contextmanager
@@ -93,6 +113,7 @@ def database():
         connection.close()
 
 
+<<<<<<< HEAD
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PASSWORD_HASH_ROUNDS)
@@ -210,6 +231,8 @@ async def authenticate_api_requests(request: FastAPIRequest, call_next):
     return await call_next(request)
 
 
+=======
+>>>>>>> origin/master
 def normalized_address_key(street_name: str, house_number: str) -> str:
     def normalize(value: str) -> str:
         normalized = unicodedata.normalize("NFKC", value).casefold()
@@ -326,6 +349,7 @@ def existing_building_for_address(street_name: str, house_number: str) -> dict[s
     return dict(matches[0]) if len(matches) == 1 else None
 
 
+<<<<<<< HEAD
 def saved_buildings_for_extraction(building_ids: list[int] | None = None) -> list[dict[str, str]]:
     with database() as connection:
         if building_ids is None:
@@ -344,6 +368,15 @@ def saved_buildings_for_extraction(building_ids: list[int] | None = None) -> lis
                     ORDER BY id DESC LIMIT ?""",
                 [*building_ids, MAX_AGENT_DB_BUILDINGS],
             ).fetchall()
+=======
+def saved_buildings_for_extraction() -> list[dict[str, str]]:
+    with database() as connection:
+        rows = connection.execute(
+            """SELECT uid, building_code, object_name, street_name, house_number, address
+               FROM buildings ORDER BY id DESC LIMIT ?""",
+            (MAX_AGENT_DB_BUILDINGS,),
+        ).fetchall()
+>>>>>>> origin/master
     return [
         {
             "uid": str(row["uid"] or ""),
@@ -385,6 +418,7 @@ def initialize_database() -> None:
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL COLLATE NOCASE UNIQUE
             );
+<<<<<<< HEAD
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
                 username TEXT NOT NULL COLLATE NOCASE UNIQUE,
@@ -412,6 +446,8 @@ def initialize_database() -> None:
                 name TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+=======
+>>>>>>> origin/master
             CREATE TABLE IF NOT EXISTS buildings (
                 id INTEGER PRIMARY KEY,
                 uid TEXT,
@@ -482,6 +518,18 @@ def initialize_database() -> None:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+<<<<<<< HEAD
+=======
+            CREATE TABLE IF NOT EXISTS calendar_events (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                event_time TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS calendar_events_date ON calendar_events (event_date);
+>>>>>>> origin/master
             CREATE TABLE IF NOT EXISTS document_index_state (
                 source_key TEXT PRIMARY KEY,
                 building_id INTEGER NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
@@ -519,6 +567,7 @@ def initialize_database() -> None:
             """
         )
         migrations = {
+<<<<<<< HEAD
             "users": {
                 "email": "TEXT NOT NULL DEFAULT ''",
                 "phone": "TEXT NOT NULL DEFAULT ''",
@@ -526,6 +575,8 @@ def initialize_database() -> None:
                 "department": "TEXT NOT NULL DEFAULT ''",
                 "profile_image": "TEXT NOT NULL DEFAULT ''",
             },
+=======
+>>>>>>> origin/master
             "buildings": {
                 "uid": "TEXT",
                 "building_code": "TEXT",
@@ -606,10 +657,13 @@ def initialize_database() -> None:
                SELECT 'document:' || id, building_id, id, file_name FROM building_documents"""
         )
         connection.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", ("Heating system",))
+<<<<<<< HEAD
         connection.execute(
             "INSERT OR IGNORE INTO auth_settings (name, value) VALUES ('session_secret', ?)",
             (secrets.token_urlsafe(48),),
         )
+=======
+>>>>>>> origin/master
 
 
 def list_category_names() -> list[str]:
@@ -618,6 +672,7 @@ def list_category_names() -> list[str]:
     return [row["name"] for row in rows]
 
 
+<<<<<<< HEAD
 def agent_database_context(building_scope: list[int] | None = None) -> str:
     with database() as connection:
         if building_scope is None:
@@ -641,6 +696,16 @@ def agent_database_context(building_scope: list[int] | None = None) -> str:
                     ORDER BY created_at DESC, id DESC LIMIT ?""",
                 [*building_scope, MAX_AGENT_DB_BUILDINGS],
             ).fetchall()
+=======
+def agent_database_context() -> str:
+    with database() as connection:
+        total = connection.execute("SELECT COUNT(*) FROM buildings").fetchone()[0]
+        buildings = connection.execute(
+            """SELECT id, uid, building_code, street_name, house_number, object_name, address, latitude, longitude
+               FROM buildings ORDER BY created_at DESC, id DESC LIMIT ?""",
+            (MAX_AGENT_DB_BUILDINGS,),
+        ).fetchall()
+>>>>>>> origin/master
         values = []
         twins = []
         maintenance = []
@@ -759,6 +824,7 @@ def agent_database_context(building_scope: list[int] | None = None) -> str:
 initialize_database()
 
 
+<<<<<<< HEAD
 class InitialAdminRequest(BaseModel):
     username: str = Field(min_length=3, max_length=80)
     display_name: str = Field(min_length=1, max_length=100)
@@ -1102,6 +1168,8 @@ async def update_user(
     return {"id": user_id, "display_name": display_name, "role": body.role, "building_ids": building_ids}
 
 
+=======
+>>>>>>> origin/master
 @app.on_event("startup")
 def start_pending_document_indexing() -> None:
     threading.Thread(target=index_pending_documents, daemon=True).start()
@@ -1138,6 +1206,16 @@ class MaintenanceAction(BaseModel):
     action: Literal["confirm", "dismiss", "resolve"]
 
 
+<<<<<<< HEAD
+=======
+class CalendarEventCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    event_date: date
+    event_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    note: str = Field(default="", max_length=2000)
+
+
+>>>>>>> origin/master
 def image_to_pdf(raw: bytes, extension: str) -> bytes:
     """Convert a raster image (JPG, PNG, GIF, single- or multi-page TIFF) into a PDF."""
     filetype = extension.lower().lstrip(".")
@@ -1776,6 +1854,7 @@ def document_search_terms(question: str) -> list[str]:
     return terms
 
 
+<<<<<<< HEAD
 def search_saved_documents(
     question: str,
     building_scope: list[int] | None = None,
@@ -1807,6 +1886,20 @@ def search_saved_documents(
             failed_count = connection.execute(
                 "SELECT COUNT(*) FROM document_index_state WHERE status = 'failed'" + scope_clause,
                 scope_params,
+=======
+def search_saved_documents(question: str) -> tuple[str, int, int]:
+    terms = document_search_terms(question)
+    if not terms:
+        with database() as connection:
+            pending_count = connection.execute(
+                "SELECT COUNT(*) FROM document_index_state WHERE status IN ('pending', 'processing')"
+            ).fetchone()[0]
+            partial_count = connection.execute(
+                "SELECT COUNT(*) FROM document_index_state WHERE status = 'partial'"
+            ).fetchone()[0]
+            failed_count = connection.execute(
+                "SELECT COUNT(*) FROM document_index_state WHERE status = 'failed'"
+>>>>>>> origin/master
             ).fetchone()[0]
         summary = {
             "terms": [],
@@ -1819,11 +1912,14 @@ def search_saved_documents(
 
     match_query = " OR ".join(f'"{term}"' for term in terms)
     with database() as connection:
+<<<<<<< HEAD
         scope_clause = ""
         scope_params: list[object] = []
         if building_scope is not None:
             scope_clause = f" AND document_text.building_id IN ({','.join('?' for _ in building_scope)})"
             scope_params = list(building_scope)
+=======
+>>>>>>> origin/master
         rows = connection.execute(
             """SELECT document_text.source_file_name, document_text.page_number,
                       buildings.uid, buildings.object_name, buildings.address,
@@ -1834,6 +1930,7 @@ def search_saved_documents(
                JOIN document_text ON document_text.id = document_text_fts.rowid
                JOIN buildings ON buildings.id = document_text.building_id
                JOIN document_index_state ON document_index_state.source_key = document_text.source_key
+<<<<<<< HEAD
                WHERE document_text_fts MATCH ?""" + scope_clause + """
                ORDER BY bm25(document_text_fts)
                LIMIT ?""",
@@ -1853,6 +1950,21 @@ def search_saved_documents(
         failed_count = connection.execute(
             "SELECT COUNT(*) FROM document_index_state WHERE status = 'failed'" + state_scope,
             scope_params,
+=======
+               WHERE document_text_fts MATCH ?
+               ORDER BY bm25(document_text_fts)
+               LIMIT ?""",
+            (match_query, DOCUMENT_SEARCH_RESULTS),
+        ).fetchall()
+        pending_count = connection.execute(
+            "SELECT COUNT(*) FROM document_index_state WHERE status IN ('pending', 'processing')"
+        ).fetchone()[0]
+        partial_count = connection.execute(
+            "SELECT COUNT(*) FROM document_index_state WHERE status = 'partial'"
+        ).fetchone()[0]
+        failed_count = connection.execute(
+            "SELECT COUNT(*) FROM document_index_state WHERE status = 'failed'"
+>>>>>>> origin/master
         ).fetchone()[0]
 
     results = [
@@ -1877,6 +1989,7 @@ def search_saved_documents(
     return json.dumps(summary, ensure_ascii=False), len(rows), pending_count
 
 
+<<<<<<< HEAD
 def search_building_database(
     question: str,
     building_scope: list[int] | None = None,
@@ -1886,6 +1999,12 @@ def search_building_database(
         return "No direct building-record search terms were identified.", 0
     if building_scope == []:
         return json.dumps({"matched_buildings": []}, ensure_ascii=False), 0
+=======
+def search_building_database(question: str) -> tuple[str, int]:
+    terms = document_search_terms(question)
+    if not terms:
+        return "No direct building-record search terms were identified.", 0
+>>>>>>> origin/master
     patterns = [f"%{term}%" for term in terms]
     term_clause = "(" + " OR ".join(
         [
@@ -1905,6 +2024,7 @@ def search_building_database(
         ]
     ) + ")"
     matches_clause = " OR ".join(term_clause for _ in terms)
+<<<<<<< HEAD
     scope_clause = ""
     if building_scope is not None:
         scope_clause = f" AND id IN ({','.join('?' for _ in building_scope)})"
@@ -1917,6 +2037,15 @@ def search_building_database(
         parameters.extend([pattern] * 8)
     if building_scope is not None:
         parameters.extend(building_scope)
+=======
+    query = f"""SELECT id, uid, object_name, address, street_name, house_number,
+                       latitude, longitude
+                FROM buildings WHERE {matches_clause}
+                ORDER BY created_at DESC, id DESC LIMIT 20"""
+    parameters: list[str] = []
+    for pattern in patterns:
+        parameters.extend([pattern] * 8)
+>>>>>>> origin/master
     with database() as connection:
         buildings = connection.execute(query, parameters).fetchall()
         records: list[dict[str, object]] = []
@@ -1969,11 +2098,15 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/api/process-files")
+<<<<<<< HEAD
 async def process_files(
     request: FastAPIRequest,
     files: list[UploadFile] = File(...),
 ) -> dict[str, list[dict[str, object]]]:
     require_writer(request.state.user)
+=======
+async def process_files(files: list[UploadFile] = File(...)) -> dict[str, list[dict[str, object]]]:
+>>>>>>> origin/master
     if not files:
         raise HTTPException(status_code=400, detail="Choose at least one file.")
 
@@ -2522,11 +2655,15 @@ async def get_categories() -> dict[str, list[str]]:
 
 @app.post("/api/address/validate")
 async def validate_address(
+<<<<<<< HEAD
     request: FastAPIRequest,
+=======
+>>>>>>> origin/master
     street_name: str = Form(""),
     house_number: str = Form(""),
     full_address: str = Form(""),
 ) -> dict[str, object]:
+<<<<<<< HEAD
     require_writer(request.state.user)
     result = geocode_coburg_address(street_name, house_number, full_address)
     existing = existing_building_for_address(street_name, house_number)
@@ -2537,6 +2674,10 @@ async def validate_address(
             if error.status_code != 404:
                 raise
             existing = None
+=======
+    result = geocode_coburg_address(street_name, house_number, full_address)
+    existing = existing_building_for_address(street_name, house_number)
+>>>>>>> origin/master
     existing_code = str(existing["building_code"]) if existing and existing["building_code"] else ""
     result["matched_building_uid"] = str(existing["uid"]) if existing else None
     result["building_match"] = {
@@ -2559,12 +2700,18 @@ async def validate_address(
 
 @app.post("/api/extract")
 async def extract_document(
+<<<<<<< HEAD
     request: FastAPIRequest,
+=======
+>>>>>>> origin/master
     file: UploadFile = File(...),
     provider: Literal["openai", "anthropic"] = Form("anthropic"),
     model: str = Form(""),
 ) -> dict[str, object]:
+<<<<<<< HEAD
     require_writer(request.state.user)
+=======
+>>>>>>> origin/master
     filename = Path(file.filename or "upload").name
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
     await file.close()
@@ -2594,10 +2741,14 @@ async def extract_document(
                 f"AI visual reading is limited to the first {len(visual_pages)} PDF pages."
             )
 
+<<<<<<< HEAD
     scope = None
     if request.state.user["role"] != ROLE_CITY_ADMIN:
         scope = assigned_building_ids(request.state.user)
     saved_buildings = saved_buildings_for_extraction(scope)
+=======
+    saved_buildings = saved_buildings_for_extraction()
+>>>>>>> origin/master
     if visual_pages:
         extracted, extraction_error = await extract_building_fields(
             "",
@@ -2653,6 +2804,7 @@ async def extract_document(
             str(extracted["street_name"]),
             str(extracted["house_number"]),
         )
+<<<<<<< HEAD
         if existing and request.state.user["role"] != ROLE_CITY_ADMIN:
             try:
                 ensure_building_access(request.state.user, int(existing["id"]))
@@ -2660,6 +2812,8 @@ async def extract_document(
                 if error.status_code != 404:
                     raise
                 existing = None
+=======
+>>>>>>> origin/master
         if existing:
             matched_building = next(
                 (building for building in saved_buildings if building["uid"] == str(existing["uid"])),
@@ -2732,7 +2886,10 @@ async def extract_document(
 
 @app.post("/api/buildings")
 async def save_building(
+<<<<<<< HEAD
     request: FastAPIRequest,
+=======
+>>>>>>> origin/master
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     object_name: str = Form(""),
@@ -2749,8 +2906,11 @@ async def save_building(
     merge_target_uid: str = Form(""),
     conflict_resolutions_json: str = Form("{}"),
 ) -> dict[str, object]:
+<<<<<<< HEAD
     user = request.state.user
     require_writer(user)
+=======
+>>>>>>> origin/master
     name = object_name.strip()
     if len(name) > 200:
         raise HTTPException(status_code=422, detail="Building name must be at most 200 characters.")
@@ -2868,15 +3028,22 @@ async def save_building(
                    FROM buildings WHERE address_key = ? OR address_key IS NULL""",
                 (address_key,),
             ).fetchall()
+<<<<<<< HEAD
             all_matches = [
+=======
+            matches = [
+>>>>>>> origin/master
                 row for row in possible_matches
                 if row["address_key"] == address_key
                 or normalized_address_key(row["street_name"], row["house_number"]) == address_key
             ]
+<<<<<<< HEAD
             matches = all_matches
             if user["role"] != ROLE_CITY_ADMIN:
                 scope = set(assigned_building_ids(user))
                 matches = [row for row in all_matches if int(row["id"]) in scope]
+=======
+>>>>>>> origin/master
 
             if len(matches) > 1:
                 target = next(
@@ -2920,6 +3087,7 @@ async def save_building(
                             "message": "The selected building no longer matches this address. Review the current match.",
                         },
                     )
+<<<<<<< HEAD
                 if user["role"] != ROLE_CITY_ADMIN:
                     if all_matches:
                         raise HTTPException(status_code=404, detail="Building not found.")
@@ -2927,6 +3095,8 @@ async def save_building(
                         status_code=403,
                         detail="Only a City Administrator can add new buildings or assign them to users.",
                     )
+=======
+>>>>>>> origin/master
                 existing = None
 
             used_code_rows = connection.execute(
@@ -3147,6 +3317,7 @@ async def save_building(
 
 
 @app.get("/api/buildings")
+<<<<<<< HEAD
 async def get_buildings(request: FastAPIRequest) -> dict[str, list[dict[str, object]]]:
     user = request.state.user
     with database() as connection:
@@ -3171,6 +3342,16 @@ async def get_buildings(request: FastAPIRequest) -> dict[str, list[dict[str, obj
                         ORDER BY created_at DESC, id DESC""",
                     scope,
                 ).fetchall()
+=======
+async def get_buildings() -> dict[str, list[dict[str, object]]]:
+    with database() as connection:
+        buildings = connection.execute(
+            """SELECT id, uid, building_code, street_name, house_number, object_name, address, latitude, longitude,
+                      file_name, created_at,
+                      (SELECT COUNT(*) FROM building_documents WHERE building_id = buildings.id) AS document_count
+               FROM buildings ORDER BY created_at DESC, id DESC"""
+        ).fetchall()
+>>>>>>> origin/master
         values = connection.execute(
             """SELECT building_values.building_id, categories.name, building_values.value
                FROM building_values JOIN categories ON categories.id = building_values.category_id"""
@@ -3193,6 +3374,7 @@ async def get_buildings(request: FastAPIRequest) -> dict[str, list[dict[str, obj
     }
 
 
+<<<<<<< HEAD
 @app.patch("/api/buildings/{building_id}")
 async def update_building(
     building_id: int,
@@ -3253,6 +3435,10 @@ async def update_building(
 @app.delete("/api/data")
 async def clear_application_data(request: FastAPIRequest) -> dict[str, object]:
     require_city_admin(request.state.user)
+=======
+@app.delete("/api/data")
+async def clear_application_data() -> dict[str, object]:
+>>>>>>> origin/master
     with database() as connection:
         building_count = connection.execute("SELECT COUNT(*) FROM buildings").fetchone()[0]
         connection.execute("DROP TRIGGER IF EXISTS document_text_ai")
@@ -3285,11 +3471,15 @@ async def clear_application_data(request: FastAPIRequest) -> dict[str, object]:
 
 
 @app.get("/api/buildings/{building_id}/documents")
+<<<<<<< HEAD
 async def get_building_documents(
     building_id: int,
     request: FastAPIRequest,
 ) -> dict[str, list[dict[str, object]]]:
     ensure_building_access(request.state.user, building_id)
+=======
+async def get_building_documents(building_id: int) -> dict[str, list[dict[str, object]]]:
+>>>>>>> origin/master
     with database() as connection:
         building = connection.execute(
             """SELECT buildings.file_name, buildings.mime_type, buildings.created_at,
@@ -3358,8 +3548,12 @@ def stored_file_response(filename: str, mime_type: str, data: bytes) -> Response
 
 
 @app.get("/api/buildings/{building_id}/file")
+<<<<<<< HEAD
 async def get_building_file(building_id: int, request: FastAPIRequest) -> Response:
     ensure_building_access(request.state.user, building_id)
+=======
+async def get_building_file(building_id: int) -> Response:
+>>>>>>> origin/master
     with database() as connection:
         row = connection.execute(
             "SELECT file_name, mime_type, file_data FROM buildings WHERE id = ?",
@@ -3371,12 +3565,16 @@ async def get_building_file(building_id: int, request: FastAPIRequest) -> Respon
 
 
 @app.get("/api/buildings/{building_id}/documents/{document_id}/file")
+<<<<<<< HEAD
 async def get_building_document_file(
     building_id: int,
     document_id: int,
     request: FastAPIRequest,
 ) -> Response:
     ensure_building_access(request.state.user, building_id)
+=======
+async def get_building_document_file(building_id: int, document_id: int) -> Response:
+>>>>>>> origin/master
     with database() as connection:
         row = connection.execute(
             """SELECT file_name, mime_type, file_data FROM building_documents
@@ -3389,11 +3587,15 @@ async def get_building_document_file(
 
 
 @app.get("/api/buildings/{building_id}/assets")
+<<<<<<< HEAD
 async def get_building_assets(
     building_id: int,
     request: FastAPIRequest,
 ) -> dict[str, object]:
     ensure_building_access(request.state.user, building_id)
+=======
+async def get_building_assets(building_id: int) -> dict[str, object]:
+>>>>>>> origin/master
     with database() as connection:
         building = connection.execute(
             "SELECT file_name, mime_type, file_data FROM buildings WHERE id = ?",
@@ -3471,12 +3673,16 @@ async def get_building_assets(
 
 
 @app.get("/api/buildings/{building_id}/assets/{asset_id}")
+<<<<<<< HEAD
 async def get_building_asset(
     building_id: int,
     asset_id: int,
     request: FastAPIRequest,
 ) -> Response:
     ensure_building_access(request.state.user, building_id)
+=======
+async def get_building_asset(building_id: int, asset_id: int) -> Response:
+>>>>>>> origin/master
     with database() as connection:
         row = connection.execute(
             """SELECT file_name, mime_type, file_data FROM building_assets
@@ -3489,6 +3695,7 @@ async def get_building_asset(
 
 
 @app.get("/api/maintenance")
+<<<<<<< HEAD
 async def get_maintenance(
     request: FastAPIRequest,
     building_id: int | None = None,
@@ -3497,6 +3704,9 @@ async def get_maintenance(
     scope = None if user["role"] == ROLE_CITY_ADMIN else assigned_building_ids(user)
     if building_id is not None:
         ensure_building_access(user, building_id)
+=======
+async def get_maintenance(building_id: int | None = None) -> dict[str, list[dict[str, object]]]:
+>>>>>>> origin/master
     with database() as connection:
         query = """SELECT maintenance_items.id, maintenance_items.building_id, buildings.uid,
                           buildings.building_code, buildings.object_name, buildings.address, maintenance_items.document_id,
@@ -3513,11 +3723,14 @@ async def get_maintenance(
         if building_id is not None:
             query += " AND maintenance_items.building_id = ?"
             parameters = (building_id,)
+<<<<<<< HEAD
         elif scope is not None:
             if not scope:
                 return {"items": []}
             query += f" AND maintenance_items.building_id IN ({','.join('?' for _ in scope)})"
             parameters = tuple(scope)
+=======
+>>>>>>> origin/master
         query += """ ORDER BY
                      CASE maintenance_items.status WHEN 'suggested' THEN 0 ELSE 1 END,
                      CASE maintenance_items.severity
@@ -3531,7 +3744,10 @@ async def get_maintenance(
 @app.patch("/api/maintenance/{maintenance_id}")
 async def update_maintenance(
     maintenance_id: int,
+<<<<<<< HEAD
     request: FastAPIRequest,
+=======
+>>>>>>> origin/master
     update: MaintenanceAction,
 ) -> dict[str, object]:
     allowed_transitions = {
@@ -3540,12 +3756,19 @@ async def update_maintenance(
     }
     with database() as connection:
         item = connection.execute(
+<<<<<<< HEAD
             "SELECT status, building_id FROM maintenance_items WHERE id = ?",
+=======
+            "SELECT status FROM maintenance_items WHERE id = ?",
+>>>>>>> origin/master
             (maintenance_id,),
         ).fetchone()
         if item is None:
             raise HTTPException(status_code=404, detail="Maintenance item not found.")
+<<<<<<< HEAD
         ensure_building_access(request.state.user, int(item["building_id"]), write=True)
+=======
+>>>>>>> origin/master
         next_status = allowed_transitions.get(item["status"], {}).get(update.action)
         if next_status is None:
             raise HTTPException(
@@ -3560,11 +3783,15 @@ async def update_maintenance(
 
 
 @app.get("/api/buildings/{building_id}/twin")
+<<<<<<< HEAD
 async def get_building_twin(
     building_id: int,
     request: FastAPIRequest,
 ) -> dict[str, object]:
     ensure_building_access(request.state.user, building_id)
+=======
+async def get_building_twin(building_id: int) -> dict[str, object]:
+>>>>>>> origin/master
     with database() as connection:
         exists = connection.execute("SELECT id FROM buildings WHERE id = ?", (building_id,)).fetchone()
         if exists is None:
@@ -3584,9 +3811,13 @@ async def get_building_twin(
 async def create_building_twin_draft(
     building_id: int,
     request: TwinDraftRequest,
+<<<<<<< HEAD
     http_request: FastAPIRequest,
 ) -> dict[str, object]:
     ensure_building_access(http_request.state.user, building_id, write=True)
+=======
+) -> dict[str, object]:
+>>>>>>> origin/master
     with database() as connection:
         if request.document_id is None:
             building = connection.execute(
@@ -3634,9 +3865,13 @@ async def create_building_twin_draft(
 async def save_building_twin(
     building_id: int,
     request: TwinSaveRequest,
+<<<<<<< HEAD
     http_request: FastAPIRequest,
 ) -> dict[str, object]:
     ensure_building_access(http_request.state.user, building_id, write=True)
+=======
+) -> dict[str, object]:
+>>>>>>> origin/master
     try:
         twin = validate_twin_model(request.twin)
     except ValueError as error:
@@ -3666,16 +3901,21 @@ async def save_building_twin(
 
 
 @app.post("/api/agent/chat", response_model=ChatResponse)
+<<<<<<< HEAD
 async def agent_chat(
     request: ChatRequest,
     background_tasks: BackgroundTasks,
     http_request: FastAPIRequest,
 ) -> ChatResponse:
+=======
+async def agent_chat(request: ChatRequest, background_tasks: BackgroundTasks) -> ChatResponse:
+>>>>>>> origin/master
     messages = [{"role": message.role, "content": message.content} for message in request.messages]
     question = next(
         (message.content for message in reversed(request.messages) if message.role == "user"),
         "",
     )
+<<<<<<< HEAD
     building_scope = None
     if http_request.state.user["role"] != ROLE_CITY_ADMIN:
         building_scope = assigned_building_ids(http_request.state.user)
@@ -3684,6 +3924,11 @@ async def agent_chat(
     matching_documents, matched_document_count, pending_document_count = search_saved_documents(
         question, building_scope
     )
+=======
+    saved_data = agent_database_context()
+    matching_buildings, matched_building_count = search_building_database(question)
+    matching_documents, matched_document_count, pending_document_count = search_saved_documents(question)
+>>>>>>> origin/master
     background_tasks.add_task(index_pending_documents)
     system_prompt = (
         "You are StadtManager's data assistant. Help the user understand and work "
@@ -3753,6 +3998,49 @@ async def agent_chat(
     return ChatResponse(reply=reply)
 
 
+<<<<<<< HEAD
+=======
+CALENDAR_EVENT_COLUMNS = "id, title, event_date, event_time, note, created_at"
+
+
+@app.get("/api/calendar/events")
+async def list_calendar_events() -> dict[str, list[dict[str, object]]]:
+    with database() as connection:
+        rows = connection.execute(
+            f"""SELECT {CALENDAR_EVENT_COLUMNS} FROM calendar_events
+                ORDER BY event_date, event_time IS NULL, event_time, id"""
+        ).fetchall()
+    return {"events": [dict(row) for row in rows]}
+
+
+@app.post("/api/calendar/events", status_code=201)
+async def create_calendar_event(event: CalendarEventCreate) -> dict[str, object]:
+    title = event.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Enter a title for the appointment.")
+    with database() as connection:
+        cursor = connection.execute(
+            """INSERT INTO calendar_events (title, event_date, event_time, note)
+               VALUES (?, ?, ?, ?)""",
+            (title, event.event_date.isoformat(), event.event_time or None, event.note.strip()),
+        )
+        row = connection.execute(
+            f"SELECT {CALENDAR_EVENT_COLUMNS} FROM calendar_events WHERE id = ?",
+            (cursor.lastrowid,),
+        ).fetchone()
+    return dict(row)
+
+
+@app.delete("/api/calendar/events/{event_id}")
+async def delete_calendar_event(event_id: int) -> dict[str, object]:
+    with database() as connection:
+        deleted = connection.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,)).rowcount
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+    return {"id": event_id, "deleted": True}
+
+
+>>>>>>> origin/master
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
     return FileResponse(PUBLIC_DIR / "index.html")
