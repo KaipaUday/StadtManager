@@ -391,6 +391,15 @@ def initialize_database() -> None:
                     (rowid, search_text, source_file_name, record_type)
                 VALUES (new.id, new.search_text, new.source_file_name, new.record_type);
             END;
+            CREATE TABLE IF NOT EXISTS calendar_events (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                event_time TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS calendar_events_date ON calendar_events (event_date);
             CREATE TABLE IF NOT EXISTS document_index_state (
                 source_key TEXT PRIMARY KEY,
                 building_id INTEGER NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
@@ -678,6 +687,13 @@ class TwinSaveRequest(BaseModel):
 
 class MaintenanceAction(BaseModel):
     action: Literal["confirm", "dismiss", "resolve"]
+
+
+class CalendarEventCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    event_date: date
+    event_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    note: str = Field(default="", max_length=2000)
 
 
 def image_to_pdf(raw: bytes, extension: str) -> bytes:
@@ -3476,6 +3492,46 @@ async def agent_chat(request: ChatRequest, background_tasks: BackgroundTasks) ->
         {"question": question, "reply": reply},
     )
     return ChatResponse(reply=reply)
+
+
+CALENDAR_EVENT_COLUMNS = "id, title, event_date, event_time, note, created_at"
+
+
+@app.get("/api/calendar/events")
+async def list_calendar_events() -> dict[str, list[dict[str, object]]]:
+    with database() as connection:
+        rows = connection.execute(
+            f"""SELECT {CALENDAR_EVENT_COLUMNS} FROM calendar_events
+                ORDER BY event_date, event_time IS NULL, event_time, id"""
+        ).fetchall()
+    return {"events": [dict(row) for row in rows]}
+
+
+@app.post("/api/calendar/events", status_code=201)
+async def create_calendar_event(event: CalendarEventCreate) -> dict[str, object]:
+    title = event.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Enter a title for the appointment.")
+    with database() as connection:
+        cursor = connection.execute(
+            """INSERT INTO calendar_events (title, event_date, event_time, note)
+               VALUES (?, ?, ?, ?)""",
+            (title, event.event_date.isoformat(), event.event_time or None, event.note.strip()),
+        )
+        row = connection.execute(
+            f"SELECT {CALENDAR_EVENT_COLUMNS} FROM calendar_events WHERE id = ?",
+            (cursor.lastrowid,),
+        ).fetchone()
+    return dict(row)
+
+
+@app.delete("/api/calendar/events/{event_id}")
+async def delete_calendar_event(event_id: int) -> dict[str, object]:
+    with database() as connection:
+        deleted = connection.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,)).rowcount
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+    return {"id": event_id, "deleted": True}
 
 
 @app.get("/", include_in_schema=False)
