@@ -12,7 +12,7 @@ python -m uvicorn app:app --app-dir Site --reload
 
 Open <http://127.0.0.1:8000>. Press `Ctrl+C` to stop the server. The site
 supports individual files or whole folders containing CSV, JSON, PDF,
-Markdown, and text files up to 5 MB each. Supported files are processed one
+Markdown, and text files up to 100 MB each by default. Supported files are processed one
 at a time. Review extracted building details, add categories such as heating
 system, and accept each record before it is saved.
 
@@ -54,6 +54,39 @@ information is sent to the selected AI provider; the assistant is told when the
 database context has been truncated. When creating a 3D draft, rendered plan
 pages are also sent to that provider.
 
+## Large documents, OCR, and AI search
+
+The upload limit defaults to 100 MB per file and can be changed with
+`STADTMANAGER_MAX_UPLOAD_MB` (1–1024). PDF processing defaults to 500 pages per
+document; change `STADTMANAGER_MAX_PDF_PAGES` to a value from 1 to 10000.
+Building-field extraction previews the first 30 pages, while the saved-document
+index processes pages up to the configured document limit.
+
+PDF pages with little or no selectable text are OCR-processed using PyMuPDF and
+the locally installed Tesseract engine. Install Tesseract and the German and
+English language data for your OS. For macOS, for example:
+
+```bash
+brew install tesseract
+```
+
+Set `OCR_LANGUAGES` to the languages available on your machine (default
+`deu+eng`). Set `TESSDATA_PREFIX` if Tesseract's language data is not in its
+standard location. OCR and indexing run locally; a document's full extracted
+text is stored in SQLite's local full-text index. Documents over the page limit,
+missing OCR languages, and indexing failures are reported in the building's
+file list.
+
+Every AI chat request automatically searches both the SQLite building records
+and the indexed contents of saved files. The assistant receives the bounded
+building overview plus matching building records and up to eight relevant
+document passages, labeled with filename, page, and building. Pending or
+partially indexed documents are identified so the assistant can disclose
+incomplete coverage. Existing saved files are queued for indexing as chat
+requests arrive. Matching document passages and database information are sent
+to the selected AI provider with the chat request; original file bytes are not
+sent as part of this retrieval context.
+
 When a document contains explicit repair, replacement, inspection, or scheduled
 maintenance information, the AI may extract an evidence-backed suggestion.
 These findings appear on the dashboard as **Needs review** and do not become
@@ -85,6 +118,9 @@ the repository or paste them into source code.
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
+export STADTMANAGER_MAX_UPLOAD_MB="100"
+export STADTMANAGER_MAX_PDF_PAGES="500"
+export OCR_LANGUAGES="deu+eng"
 
 # Optional database settings for future database-backed features
 export DB_HOST="localhost"

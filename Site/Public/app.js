@@ -941,12 +941,21 @@ async function openBuildingDetails(buildingId) {
         row.className = "building-document-row";
         const fileName = document.createElement("span");
         fileName.textContent = source.file_name;
+        const status = document.createElement("small");
+        const statusLabels = {
+          pending: "Waiting for text indexing",
+          processing: "Extracting and indexing text…",
+          ready: `Searchable · ${source.indexed_pages} page${source.indexed_pages === 1 ? "" : "s"}`,
+          partial: `Partially indexed · ${source.index_error}`,
+          failed: `Indexing failed · ${source.index_error}`,
+        };
+        status.textContent = statusLabels[source.index_status] || "Index status unavailable";
         const link = document.createElement("a");
         link.href = source.url;
         link.target = "_blank";
         link.rel = "noreferrer";
         link.textContent = source.is_primary ? "Original file" : "Open file";
-        row.append(fileName, link);
+        row.append(fileName, status, link);
         return row;
       }));
       document.querySelector("#building-document-count").textContent =

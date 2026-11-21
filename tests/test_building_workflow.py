@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -277,11 +278,19 @@ class BuildingWorkflowTests(unittest.TestCase):
                 twin_columns = {
                     row["name"] for row in connection.execute("PRAGMA table_info(building_twins)")
                 }
+                pending_status = connection.execute(
+                    "SELECT status FROM document_index_state WHERE source_key = 'building:1'"
+                ).fetchone()
             self.assertEqual((building["street_name"], building["house_number"]), ("Marktplatz", "10a"))
             self.assertTrue(building["uid"])
             self.assertTrue(building["address_key"])
             self.assertIn("document_id", asset_columns)
             self.assertIn("source_document_id", twin_columns)
+            self.assertEqual(pending_status["status"], "pending")
+            module.index_pending_documents()
+            indexed_text, index_count, _ = module.search_saved_documents("legacy building Marktplatz")
+            self.assertEqual(index_count, 1)
+            self.assertIn("Legacy building", indexed_text)
         finally:
             module.DB_PATH = original_path
 
@@ -332,6 +341,94 @@ class BuildingWorkflowTests(unittest.TestCase):
         self.assertIn("Coburg Library", system_prompt)
         self.assertIn("District heating", system_prompt)
         self.assertNotIn("original-file-secret-text", system_prompt)
+        self.assertIn("Targeted SQLite search for the latest user question", system_prompt)
+        self.assertIn("Automatic full-text document search for the latest user question", system_prompt)
+
+    def test_chat_searches_indexed_documents_and_returns_page_evidence(self) -> None:
+        source_text = (
+            "The emergency generator inspection must be renewed before the end of 2028. "
+            "The service record was signed by the building manager."
+        )
+        saved = self.client.post(
+            "/api/buildings",
+            data={"street_name": "Theaterplatz", "house_number": "1"},
+            files={"file": ("generator-inspection.txt", source_text.encode(), "text/plain")},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+
+        documents = self.client.get(f"/api/buildings/{saved.json()['id']}/documents").json()["documents"]
+        self.assertEqual(documents[0]["index_status"], "ready")
+        serialized, result_count, pending = module.search_saved_documents(
+            "When should the generator inspection be renewed?"
+        )
+        self.assertEqual(result_count, 1)
+        self.assertEqual(pending, 0)
+        search_result = json.loads(serialized)["matches"][0]
+        self.assertEqual(search_result["file"], "generator-inspection.txt")
+        self.assertEqual(search_result["page"], 1)
+        self.assertIn("before the end of 2028", search_result["evidence"])
+
+        os.environ["ANTHROPIC_API_KEY"] = "test-key-not-sent"
+        fake_client = SimpleNamespace(
+            messages=SimpleNamespace(
+                create=AsyncMock(
+                    return_value=SimpleNamespace(
+                        content=[SimpleNamespace(type="text", text="The inspection should be renewed by 2028 [generator-inspection.txt, page 1].")]
+                    )
+                )
+            )
+        )
+        with patch.object(module, "AsyncAnthropic", return_value=fake_client):
+            answer = self.client.post(
+                "/api/agent/chat",
+                json={
+                    "provider": "anthropic",
+                    "messages": [{"role": "user", "content": "When should the generator inspection be renewed?"}],
+                },
+            )
+        self.assertEqual(answer.status_code, 200, answer.text)
+        system_prompt = fake_client.messages.create.call_args.kwargs["system"]
+        self.assertIn("generator-inspection.txt", system_prompt)
+        self.assertIn("before the end of 2028", system_prompt)
+        self.assertIn("page", system_prompt)
+
+    def test_upload_limit_exceeds_previous_five_megabyte_cap(self) -> None:
+        self.assertGreater(module.MAX_UPLOAD_BYTES, 5 * 1024 * 1024)
+        content = b"x" * (5 * 1024 * 1024 + 1)
+        response = self.client.post(
+            "/api/process-files",
+            files={"files": ("large.txt", content, "text/plain")},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotIn("error", response.json()["files"][0])
+
+    def test_pdf_page_limit_is_reported_for_large_documents(self) -> None:
+        document = pymupdf.open()
+        for _ in range(module.MAX_PREVIEW_PDF_PAGES + 1):
+            document.new_page()
+        pages, warnings, page_count = module.extract_pdf_pages(
+            document.tobytes(),
+            page_limit=module.MAX_PREVIEW_PDF_PAGES,
+            ocr_scanned_pages=False,
+        )
+        self.assertEqual(page_count, module.MAX_PREVIEW_PDF_PAGES + 1)
+        self.assertEqual(len(pages), module.MAX_PREVIEW_PDF_PAGES)
+        self.assertTrue(any("Only the first" in warning for warning in warnings))
+
+    @unittest.skipUnless(shutil.which("tesseract"), "Tesseract is required for OCR")
+    def test_scanned_pdf_uses_ocr_for_searchable_text(self) -> None:
+        source = pymupdf.open()
+        page = source.new_page(width=800, height=300)
+        page.insert_text((35, 120), "OCR generator inspection 2028", fontsize=36)
+        image_bytes = page.get_pixmap(dpi=150).tobytes("png")
+        scanned = pymupdf.open()
+        scanned_page = scanned.new_page(width=800, height=300)
+        scanned_page.insert_image(scanned_page.rect, stream=image_bytes)
+
+        pages, warnings, _ = module.extract_pdf_pages(scanned.tobytes())
+        self.assertIn("generator", pages[0]["content"].casefold())
+        self.assertTrue(pages[0]["used_ocr"])
+        self.assertFalse(any("Tesseract OCR" in warning for warning in warnings))
 
     def test_agent_database_context_marks_records_beyond_limit_as_truncated(self) -> None:
         with module.database() as connection:
@@ -511,7 +608,7 @@ class BuildingWorkflowTests(unittest.TestCase):
             files={"file": ("scanned-plan.pdf", document.tobytes(), "application/pdf")},
         )
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertIn("no selectable text", response.json()["extraction_error"])
+        self.assertTrue(response.json()["extraction_error"])
         self.assertEqual(response.json()["object_name"], "")
 
 
