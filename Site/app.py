@@ -5,7 +5,6 @@ import io
 import json
 import logging
 import math
-import mimetypes
 import os
 import shutil
 import sqlite3
@@ -29,6 +28,11 @@ import pymupdf
 from pydantic import BaseModel, Field
 from starlette.staticfiles import StaticFiles
 
+try:  # imported as package module (tests: "from Site import app")
+    from . import file_formats
+except ImportError:  # started with "uvicorn app:app --app-dir Site"
+    import file_formats
+
 
 BASE_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = BASE_DIR / "Public"
@@ -51,7 +55,9 @@ MAX_TWIN_PDF_PAGES = 8
 MAX_TWIN_IMAGES = 20
 MAX_TWIN_IMAGE_BYTES = 1_500_000
 MAX_TWIN_TOTAL_IMAGE_BYTES = 12 * 1024 * 1024
-ALLOWED_EXTENSIONS = {".csv", ".json", ".md", ".pdf", ".txt"}
+ALLOWED_EXTENSIONS = set(file_formats.SUPPORTED_EXTENSIONS)
+IMAGE_EXTENSIONS = set(file_formats.IMAGE_EXTENSIONS)
+RENDERABLE_MIME_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/gif", "image/tiff"}
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -457,7 +463,39 @@ class MaintenanceAction(BaseModel):
     action: Literal["confirm", "dismiss", "resolve"]
 
 
-def render_pdf_assets(raw: bytes) -> tuple[list[dict[str, object]], list[str]]:
+def image_to_pdf(raw: bytes, extension: str) -> bytes:
+    """Convert a raster image (JPG, PNG, GIF, single- or multi-page TIFF) into a PDF."""
+    filetype = extension.lower().lstrip(".")
+    filetype = {"jpeg": "jpg", "tiff": "tif"}.get(filetype, filetype)
+    try:
+        with pymupdf.open(stream=raw, filetype=filetype) as image_document:
+            if image_document.page_count < 1:
+                raise ValueError("The image contains no pages.")
+            return image_document.convert_to_pdf()
+    except ValueError:
+        raise
+    except Exception as error:  # MuPDF reports damaged images with several exception types
+        raise ValueError(f"The image could not be opened: {error}") from error
+
+
+def renderable_pdf(raw: bytes, mime_type: str, filename: str = "") -> bytes:
+    """Return PDF bytes for a stored PDF or image, so both share the PDF pipeline."""
+    if mime_type == "application/pdf":
+        return raw
+    extension = Path(filename).suffix.lower()
+    if extension not in IMAGE_EXTENSIONS:
+        extension = {
+            "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/tiff": ".tif",
+        }.get(mime_type, "")
+    if not extension:
+        raise ValueError("Only PDF files and images can be rendered.")
+    return image_to_pdf(raw, extension)
+
+
+def render_pdf_assets(
+    raw: bytes,
+    include_embedded_images: bool = True,
+) -> tuple[list[dict[str, object]], list[str]]:
     with pymupdf.open(stream=raw, filetype="pdf") as document:
         assets: list[dict[str, object]] = []
         warnings: list[str] = []
@@ -502,7 +540,7 @@ def render_pdf_assets(raw: bytes) -> tuple[list[dict[str, object]], list[str]]:
         }
         seen_xrefs: set[int] = set()
         image_count = 0
-        for page_index in range(page_count):
+        for page_index in range(page_count if include_embedded_images else 0):
             page = document.load_page(page_index)
             for image_info in page.get_images(full=True):
                 xref = int(image_info[0])
@@ -673,10 +711,37 @@ async def generate_twin_draft(
         raise HTTPException(status_code=502, detail=f"The AI returned an invalid 3D model draft: {error}") from error
 
 
+MAX_IMAGE_OCR_PIXELS = 40_000_000
+
+
+def image_ocr_dpi(page: object) -> int:
+    """OCR resolution for a page made from a photo or scan.
+
+    Photos are often tagged with 72 dpi, so rendering them at the default 180 dpi
+    would upscale a 4000-pixel photo to 10000 pixels. Use the image's own pixel
+    resolution instead (at most 180 dpi and 40 megapixels).
+    """
+    dpi = 180
+    try:
+        width_inches = page.rect.width / 72
+        height_inches = page.rect.height / 72
+        images = page.get_images(full=True)
+        if images and width_inches > 0 and height_inches > 0:
+            native_dpi = float(images[0][2]) / width_inches
+            dpi = int(max(50, min(180, native_dpi)))
+            area = width_inches * height_inches
+            if area * dpi * dpi > MAX_IMAGE_OCR_PIXELS:
+                dpi = max(50, int(math.sqrt(MAX_IMAGE_OCR_PIXELS / area)))
+    except Exception:  # keep the default resolution if the page can't be inspected
+        return 180
+    return dpi
+
+
 def extract_pdf_pages(
     raw: bytes,
     page_limit: int = MAX_PDF_PAGES,
     ocr_scanned_pages: bool = True,
+    from_image: bool = False,
 ) -> tuple[list[dict[str, object]], list[str], int]:
     if page_limit < 1:
         raise ValueError("STADTMANAGER_MAX_PDF_PAGES must be greater than zero.")
@@ -702,7 +767,7 @@ def extract_pdf_pages(
                     try:
                         ocr_options: dict[str, object] = {
                             "language": OCR_LANGUAGES,
-                            "dpi": 180,
+                            "dpi": image_ocr_dpi(page) if from_image else 180,
                             "full": True,
                         }
                         if os.getenv("TESSDATA_PREFIX"):
@@ -725,6 +790,65 @@ def extract_pdf_pages(
     return pages, warnings, page_count
 
 
+def document_pages(
+    filename: str,
+    raw: bytes,
+    page_limit: int = MAX_PDF_PAGES,
+) -> dict[str, object]:
+    """Read the text of any supported file as a list of pages.
+
+    PDFs and images (via OCR) use PyMuPDF; every other format is read by
+    ``file_formats``. Damaged files are reported in ``note`` rather than raised,
+    so they can still be stored; only unsupported extensions raise ValueError.
+    """
+    extension = Path(filename).suffix.lower()
+    if extension not in ALLOWED_EXTENSIONS:
+        raise ValueError(
+            f"Unsupported file type ({extension or 'no extension'}). "
+            f"Supported types: {file_formats.supported_extensions_text()}."
+        )
+    kind = file_formats.format_label(filename)
+    if extension == ".pdf" or extension in IMAGE_EXTENSIONS:
+        if extension == ".pdf":
+            pdf_raw = raw
+        else:
+            try:
+                pdf_raw = image_to_pdf(raw, extension)
+            except (RuntimeError, ValueError) as error:
+                logger.warning("Could not open image %s: %s", filename, error)
+                return {
+                    "kind": kind,
+                    "pages": [],
+                    "page_count": 0,
+                    "warnings": [],
+                    "note": "The image can be saved, but it could not be opened for text recognition. "
+                    "Enter the building details manually.",
+                    "details": f"{kind} · could not be opened",
+                }
+        pages, warnings, page_count = extract_pdf_pages(
+            pdf_raw,
+            page_limit=page_limit,
+            from_image=extension in IMAGE_EXTENSIONS,
+        )
+        return {
+            "kind": kind,
+            "pages": pages,
+            "page_count": page_count,
+            "warnings": warnings,
+            "note": "",
+            "details": "",
+        }
+    extracted = file_formats.extract_document(filename, raw)
+    return {
+        "kind": extracted["kind"],
+        "pages": extracted["pages"],
+        "page_count": len(extracted["pages"]),
+        "warnings": extracted["warnings"],
+        "note": extracted["note"],
+        "details": extracted["details"],
+    }
+
+
 def process_upload(
     filename: str,
     raw: bytes,
@@ -732,33 +856,58 @@ def process_upload(
 ) -> dict[str, object]:
     extension = Path(filename).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
-        raise ValueError("Use a CSV, JSON, Markdown, PDF, or text file.")
+        raise ValueError(
+            f"Unsupported file type ({extension or 'no extension'}). "
+            f"Supported types: {file_formats.supported_extensions_text()}."
+        )
 
-    if extension == ".pdf":
-        pages, warnings, page_count = extract_pdf_pages(raw, page_limit=page_limit)
+    if extension == ".pdf" or extension in IMAGE_EXTENSIONS:
+        document = document_pages(filename, raw, page_limit=page_limit)
+        pages = document["pages"]
+        page_count = int(document["page_count"])
+        kind = str(document["kind"])
+        is_image = extension in IMAGE_EXTENSIONS
         extracted = "\n\n".join(
             f"[Page {page['page_number']}]\n{page['content']}"
             for page in pages
             if page["content"]
         )
         has_text = bool(extracted.strip())
-        ocr_page_count = sum(bool(page["used_ocr"]) for page in pages)
-        details = f"{page_count:,} pages"
+        ocr_page_count = sum(bool(page.get("used_ocr")) for page in pages)
+        if document["details"]:
+            details = str(document["details"])
+        elif is_image:
+            details = f"{page_count:,} image page{'' if page_count == 1 else 's'}"
+        else:
+            details = f"{page_count:,} pages"
         if ocr_page_count:
             details += f" · OCR on {ocr_page_count:,} page{'' if ocr_page_count == 1 else 's'}"
+        if not has_text and not document["details"]:
+            details += " · no readable text" if is_image else " · image/scanned PDF"
+        manual_note = str(document["note"]) or (
+            "No readable text detected. Review this image manually."
+            if is_image
+            else "No readable text detected. Review this PDF manually."
+        )
         return {
             "filename": filename,
-            "kind": "PDF",
-            "details": details + ("" if has_text else " · image/scanned PDF"),
-            "preview": extracted[:1_200] if has_text else "No readable text detected. Review this PDF manually.",
-            "content": f"PDF file: {filename}\n{extracted}"[:MAX_CONTEXT_CHARS] if has_text else "",
+            "kind": kind,
+            "details": details,
+            "preview": extracted[:1_200] if has_text else manual_note,
+            "content": f"{kind} file: {filename}\n{extracted}"[:MAX_CONTEXT_CHARS] if has_text else "",
             "page_count": page_count,
-            "ocr_warnings": warnings,
+            "ocr_warnings": document["warnings"],
+            "note": "" if has_text else str(document["note"]),
         }
 
-    text = raw.decode("utf-8-sig")
     if extension == ".csv":
-        rows = list(csv.DictReader(io.StringIO(text)))
+        text = file_formats.decode_text(raw)
+        try:  # German exports usually use ";" instead of ","
+            dialect = csv.Sniffer().sniff(text[:20_000], delimiters=",;\t|")
+            delimiter = dialect.delimiter
+        except csv.Error:
+            delimiter = ","
+        rows = list(csv.DictReader(io.StringIO(text), delimiter=delimiter))
         headers = list(rows[0].keys()) if rows else []
         preview = rows[:6]
         content = (
@@ -776,7 +925,7 @@ def process_upload(
         }
 
     if extension == ".json":
-        data = json.loads(text)
+        data = json.loads(raw.decode("utf-8-sig"))
         if isinstance(data, list):
             details = f"{len(data):,} items"
         elif isinstance(data, dict):
@@ -792,12 +941,18 @@ def process_upload(
             "content": f"JSON file: {filename}\n{formatted}"[:MAX_CONTEXT_CHARS],
         }
 
+    document = document_pages(filename, raw, page_limit=page_limit)
+    kind = str(document["kind"])
+    text = "\n\n".join(str(page["content"]) for page in document["pages"] if page["content"])
+    note = str(document["note"])
     return {
         "filename": filename,
-        "kind": "Text",
-        "details": f"{len(text):,} characters",
-        "preview": text[:1_200],
-        "content": f"Text file: {filename}\n{text}"[:MAX_CONTEXT_CHARS],
+        "kind": kind,
+        "details": str(document["details"]),
+        "preview": text[:1_200] if text else note,
+        "content": f"{kind} file: {filename}\n{text}"[:MAX_CONTEXT_CHARS] if text else "",
+        "ocr_warnings": document["warnings"],
+        "note": "" if text else note,
     }
 
 
@@ -834,19 +989,21 @@ def index_document(source_key: str) -> None:
     try:
         filename = source["source_file_name"]
         raw = bytes(source["file_data"])
-        if Path(filename).suffix.lower() == ".pdf":
-            pages, warnings, page_count = extract_pdf_pages(raw)
-            if page_count > len(pages):
+        extension = Path(filename).suffix.lower()
+        if extension in {".csv", ".json"}:
+            extracted = str(process_upload(filename, raw)["content"])
+            pages = [{"page_number": 1, "content": extracted}]
+        else:
+            document = document_pages(filename, raw)
+            pages = list(document["pages"])
+            warnings = list(document["warnings"])
+            page_count = int(document["page_count"])
+            if (extension == ".pdf" or extension in IMAGE_EXTENSIONS) and page_count > len(pages):
                 warnings.append(
                     f"Indexed {len(pages):,} of {page_count:,} PDF pages due to the configured page limit."
                 )
-        else:
-            extension = Path(filename).suffix.lower()
-            if extension in {".txt", ".md"}:
-                extracted = raw.decode("utf-8-sig")
-            else:
-                extracted = str(process_upload(filename, raw)["content"])
-            pages = [{"page_number": 1, "content": extracted}]
+            if not pages and document["note"]:
+                warnings.append(str(document["note"]))
 
         chunks: list[tuple[int, int, str]] = []
         for page in pages:
@@ -1516,7 +1673,7 @@ async def extract_document(
             "other_fields": [],
             "maintenance_findings": [],
         }
-        extraction_error = (
+        extraction_error = str(parsed_file.get("note") or "") or (
             "No selectable text was found. OCR was attempted where available; enter details manually "
             "if the scan could not be read."
         )
@@ -1626,19 +1783,34 @@ async def save_building(
     filename = Path(file.filename or "upload").name
     extension = Path(filename).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=415, detail="Unsupported file type.")
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type. Supported types: {file_formats.supported_extensions_text()}.",
+        )
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
     await file.close()
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=f"File exceeds the {MAX_UPLOAD_MB} MB server limit.")
 
-    mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    mime_type = file_formats.mime_type_for(filename)
     try:
-        assets, asset_warnings = render_pdf_assets(raw) if extension == ".pdf" else ([], [])
+        if extension == ".pdf":
+            assets, asset_warnings = render_pdf_assets(raw)
+        elif extension in IMAGE_EXTENSIONS:
+            assets, asset_warnings = render_pdf_assets(
+                image_to_pdf(raw, extension),
+                include_embedded_images=False,
+            )
+        else:
+            assets, asset_warnings = [], []
     except (RuntimeError, ValueError) as error:
-        logger.warning("Could not extract PDF images for %s: %s", filename, error)
+        logger.warning("Could not extract preview images for %s: %s", filename, error)
         assets = []
-        asset_warnings = ["The PDF was saved, but its pages and images could not be extracted."]
+        asset_warnings = [
+            "The PDF was saved, but its pages and images could not be extracted."
+            if extension == ".pdf"
+            else "The image was saved, but no preview could be created."
+        ]
     merged = False
     try:
         with database() as connection:
@@ -2001,6 +2173,21 @@ async def get_building_documents(building_id: int) -> dict[str, list[dict[str, o
     }
 
 
+def stored_file_response(filename: str, mime_type: str, data: bytes) -> Response:
+    """Serve a stored file without letting uploaded HTML/XML/SVG run scripts in the app."""
+    filename = Path(filename).name
+    inline = mime_type in file_formats.INLINE_SAFE_MIME_TYPES
+    media_type = mime_type if inline else "application/octet-stream"
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"{'inline' if inline else 'attachment'}; filename*=UTF-8''{quote(filename)}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @app.get("/api/buildings/{building_id}/file")
 async def get_building_file(building_id: int) -> Response:
     with database() as connection:
@@ -2010,12 +2197,7 @@ async def get_building_file(building_id: int) -> Response:
         ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Building not found.")
-    filename = Path(row["file_name"]).name
-    return Response(
-        content=row["file_data"],
-        media_type=row["mime_type"],
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}"},
-    )
+    return stored_file_response(row["file_name"], row["mime_type"], row["file_data"])
 
 
 @app.get("/api/buildings/{building_id}/documents/{document_id}/file")
@@ -2028,19 +2210,14 @@ async def get_building_document_file(building_id: int, document_id: int) -> Resp
         ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Building document not found.")
-    filename = Path(row["file_name"]).name
-    return Response(
-        content=row["file_data"],
-        media_type=row["mime_type"],
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}"},
-    )
+    return stored_file_response(row["file_name"], row["mime_type"], row["file_data"])
 
 
 @app.get("/api/buildings/{building_id}/assets")
 async def get_building_assets(building_id: int) -> dict[str, object]:
     with database() as connection:
         building = connection.execute(
-            "SELECT mime_type, file_data FROM buildings WHERE id = ?",
+            "SELECT file_name, mime_type, file_data FROM buildings WHERE id = ?",
             (building_id,),
         ).fetchone()
         if building is None:
@@ -2057,15 +2234,23 @@ async def get_building_assets(building_id: int) -> dict[str, object]:
         ).fetchall()
 
     warnings: list[str] = []
-    if building["mime_type"] == "application/pdf" and not any(
+    if building["mime_type"] in RENDERABLE_MIME_TYPES and not any(
         asset["asset_type"] == "floorplan-page" and asset["document_id"] is None for asset in assets
     ):
+        is_pdf = building["mime_type"] == "application/pdf"
         try:
-            rendered_assets, warnings = render_pdf_assets(building["file_data"])
+            rendered_assets, warnings = render_pdf_assets(
+                renderable_pdf(bytes(building["file_data"]), building["mime_type"], building["file_name"]),
+                include_embedded_images=is_pdf,
+            )
         except (RuntimeError, ValueError) as error:
-            logger.warning("Could not render stored PDF for building %s: %s", building_id, error)
+            logger.warning("Could not render stored file for building %s: %s", building_id, error)
             rendered_assets = []
-            warnings = ["The saved PDF could not be rendered for image preview."]
+            warnings = [
+                "The saved PDF could not be rendered for image preview."
+                if is_pdf
+                else "The saved image could not be rendered for preview."
+            ]
         with database() as connection:
             connection.executemany(
                 """INSERT OR IGNORE INTO building_assets
@@ -2116,12 +2301,7 @@ async def get_building_asset(building_id: int, asset_id: int) -> Response:
         ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Building image not found.")
-    filename = Path(row["file_name"]).name
-    return Response(
-        content=row["file_data"],
-        media_type=row["mime_type"],
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}"},
-    )
+    return stored_file_response(row["file_name"], row["mime_type"], row["file_data"])
 
 
 @app.get("/api/maintenance")
@@ -2217,12 +2397,22 @@ async def create_building_twin_draft(
             ).fetchone()
     if building is None:
         raise HTTPException(status_code=404, detail="Building or selected document not found.")
-    if building["mime_type"] != "application/pdf":
-        raise HTTPException(status_code=415, detail="3D drafts can currently be created from PDF floor plans.")
+    if building["mime_type"] not in RENDERABLE_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail="3D drafts can currently be created from PDF floor plans and scanned plan images.",
+        )
+    is_pdf = building["mime_type"] == "application/pdf"
     try:
-        assets, warnings = render_pdf_assets(building["file_data"])
+        assets, warnings = render_pdf_assets(
+            renderable_pdf(bytes(building["file_data"]), building["mime_type"], building["file_name"]),
+            include_embedded_images=is_pdf,
+        )
     except (RuntimeError, ValueError) as error:
-        raise HTTPException(status_code=422, detail="Could not render pages or images from this PDF.") from error
+        raise HTTPException(
+            status_code=422,
+            detail="Could not render pages or images from this PDF." if is_pdf else "Could not render this image.",
+        ) from error
     twin = await generate_twin_draft(
         assets,
         request.provider,
